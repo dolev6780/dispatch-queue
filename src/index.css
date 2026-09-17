@@ -1,0 +1,184 @@
+/* ==========================================================================
+   nblabl12 — Material UI (Material Design 3) Design System
+   ========================================================================== */
+
+:root {
+  /* Material 3 Color Roles - Blue, White & Gray Spectrum */
+  --md-sys-color-primary: #38bdf8;
+  --md-sys-color-on-primary: #082f49;
+  --md-sys-color-primary-container: rgba(56, 189, 248, 0.16);
+  --md-sys-color-on-primary-container: #bae6fd;
+  --md-sys-color-primary-hover: #7dd3fc;
+
+  --md-sys-color-surface: #0b1329;
+  --md-sys-color-surface-dim: #070d1e;
+  --md-sys-color-surface-container-lowest: #0a1024;
+  --md-sys-color-surface-container-low: #101c3d;
+  --md-sys-color-surface-container: #16244d;
+  --md-sys-color-surface-container-high: #1e3061;
+  --md-sys-color-surface-container-highest: #283d75;
+
+  --md-sys-color-on-surface: #f8fafc;
+  --md-sys-color-on-surface-variant: #cbd5e1;
+  --md-sys-color-outline: rgba(255, 255, 255, 0.12);
+  --md-sys-color-outline-variant: rgba(255, 255, 255, 0.06);
+
+  /* Status Colors */
+  --status-dispatch: #38bdf8;
+  --status-dispatch-bg: rgba(56, 189, 248, 0.14);
+  --status-dispatch-border: rgba(56, 189, 248, 0.35);
+
+  --status-queue: #60a5fa;
+  --status-queue-bg: rgba(96, 165, 250, 0.14);
+  --status-queue-border: rgba(96, 165, 250, 0.35);
+
+  --status-completed: #94a3b8;
+  --status-completed-bg: rgba(148, 163, 184, 0.14);
+  --status-completed-border: rgba(148, 163, 184, 0.3);
+
+  /* Material Typography Scale */
+  --md-font-family: 'Roboto', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --md-font-display: 'Outfit', 'Roboto', sans-serif;
+  --md-font-mono: 'JetBrains Mono', monospace;
+
+  /* Material Elevation Levels */
+  --md-elevation-0: none;
+  --md-elevation-1: 0 1px 3px 1px rgba(0, 0, 0, 0.2), 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --md-elevation-2: 0 2px 6px 2px rgba(0, 0, 0, 0.2), 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --md-elevation-3: 0 4px 8px 3px rgba(0, 0, 0, 0.2), 0 1px 3px 0 rgba(0, 0, 0, 0.3);
+  --md-elevation-4: 0 6px 10px 4px rgba(0, 0, 0, 0.2), 0 2px 3px 0 rgba(0, 0, 0, 0.3);
+
+  /* Material Shape Corner Radii */
+  --md-shape-xs: 4px;
+  --md-shape-sm: 8px;
+  --md-shape-md: 12px;
+  --md-shape-lg: 16px;
+  --md-shape-xl: 28px;
+  --md-shape-full: 9999px;
+
+  /* State Layer Opacities */
+  --md-state-hover: rgba(255, 255, 255, 0.08);
+  --md-state-focus: rgba(255, 255, 255, 0.12);
+  --md-state-pressed: rgba(255, 255, 255, 0.16);
+
+  /* Motion Curves */
+  --md-motion-standard: cubic-bezier(0.2, 0, 0, 1);
+  --md-motion-emphasized: cubic-bezier(0.2, 0, 0.2, 1);
+  --md-transition: 0.2s var(--md-motion-standard);
+}
+
+/* Light Theme overrides (Clean Material Light) */
+[data-theme="light"] {
+  --md-sys-color-primary: #0284c7;
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-primary-container: #e0f2fe;
+  --md-sys-color-on-primary-container: #0369a1;
+  --md-sys-color-primary-hover: #0369a1;
+
+  --md-sys-color-surface: #f8fafc;
+  --md-sys-color-surface-dim: #f1f5f9;
+  --md-sys-color-surface-container-lowest: #ffffff;
+  --md-sys-color-surface-container-low: #f8fafc;
+  --md-sys-color-surface-container: #f1f5f9;
+  --md-sys-color-surface-container-high: #e2e8f0;
+  --md-sys-color-surface-container-highest: #cbd5e1;
+
+  --md-sys-color-on-surface: #0f172a;
+  --md-sys-color-on-surface-variant: #475569;
+  --md-sys-color-outline: rgba(15, 23, 42, 0.14);
+  --md-sys-color-outline-variant: rgba(15, 23, 42, 0.06);
+
+  --status-dispatch: #0284c7;
+  --status-dispatch-bg: rgba(2, 132, 199, 0.1);
+  --status-dispatch-border: rgba(2, 132, 199, 0.25);
+
+  --status-queue: #2563eb;
+  --status-queue-bg: rgba(37, 99, 235, 0.1);
+  --status-queue-border: rgba(37, 99, 235, 0.25);
+
+  --status-completed: #64748b;
+  --status-completed-bg: rgba(100, 116, 139, 0.1);
+  --status-completed-border: rgba(100, 116, 139, 0.25);
+
+  --md-elevation-1: 0 1px 3px 0 rgba(15, 23, 42, 0.08), 0 1px 2px -1px rgba(15, 23, 42, 0.08);
+  --md-elevation-2: 0 3px 6px -1px rgba(15, 23, 42, 0.08), 0 2px 4px -2px rgba(15, 23, 42, 0.08);
+  --md-elevation-3: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -4px rgba(15, 23, 42, 0.08);
+
+  --md-state-hover: rgba(15, 23, 42, 0.04);
+  --md-state-focus: rgba(15, 23, 42, 0.08);
+  --md-state-pressed: rgba(15, 23, 42, 0.12);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  min-height: 100vh;
+  background-color: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+  font-family: var(--md-font-family);
+  line-height: 1.5;
+  overflow-x: hidden;
+  /* Clean, subtle Material surface tint */
+  background-image: radial-gradient(circle 800px at 50% 0%, rgba(56, 189, 248, 0.06), transparent 70%);
+}
+
+/* Material Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--md-sys-color-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--md-sys-color-surface-container-high);
+  border-radius: var(--md-shape-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--md-sys-color-primary);
+}
+
+/* Typography Scale */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--md-font-display);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--md-sys-color-on-surface);
+  letter-spacing: -0.015em;
+}
+
+code, pre {
+  font-family: var(--md-font-mono);
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+input, select, textarea {
+  font-family: inherit;
+  font-size: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
