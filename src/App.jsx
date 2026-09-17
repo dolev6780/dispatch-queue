@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import {
   Radio,
   Clock,
@@ -20,7 +20,13 @@ import {
   Maximize2,
   Minimize2,
   Bell,
-  BellOff
+  BellOff,
+  Sliders,
+  RotateCcw,
+  Edit2,
+  Settings2,
+  Check,
+  X
 } from 'lucide-react'
 import './App.css'
 
@@ -75,18 +81,46 @@ const playBellRing = () => {
   }
 }
 
-// 7-day configuration with work day rules:
-// Sunday: 08:00 – 15:30 (450 minutes)
-// Monday – Thursday: 08:00 – 16:30 (510 minutes)
-// Friday & Saturday: Not work days (Weekend / Off)
-const DAYS_OF_WEEK = [
-  { key: 0, name: 'Sunday', short: 'Sun', hours: '08:00 – 15:30', totalMinutes: 450, isSunday: true, isWorkDay: true },
-  { key: 1, name: 'Monday', short: 'Mon', hours: '08:00 – 16:30', totalMinutes: 510, isSunday: false, isWorkDay: true },
-  { key: 2, name: 'Tuesday', short: 'Tue', hours: '08:00 – 16:30', totalMinutes: 510, isSunday: false, isWorkDay: true },
-  { key: 3, name: 'Wednesday', short: 'Wed', hours: '08:00 – 16:30', totalMinutes: 510, isSunday: false, isWorkDay: true },
-  { key: 4, name: 'Thursday', short: 'Thu', hours: '08:00 – 16:30', totalMinutes: 510, isSunday: false, isWorkDay: true },
-  { key: 5, name: 'Friday', short: 'Fri', hours: 'Non-Working Day', totalMinutes: 0, isSunday: false, isWorkDay: false },
-  { key: 6, name: 'Saturday', short: 'Sat', hours: 'Non-Working Day', totalMinutes: 0, isSunday: false, isWorkDay: false }
+// Base metadata for all 7 weekdays
+const BASE_DAYS_META = [
+  { key: 0, name: 'Sunday', short: 'Sun', isSunday: true },
+  { key: 1, name: 'Monday', short: 'Mon', isSunday: false },
+  { key: 2, name: 'Tuesday', short: 'Tue', isSunday: false },
+  { key: 3, name: 'Wednesday', short: 'Wed', isSunday: false },
+  { key: 4, name: 'Thursday', short: 'Thu', isSunday: false },
+  { key: 5, name: 'Friday', short: 'Fri', isSunday: false },
+  { key: 6, name: 'Saturday', short: 'Sat', isSunday: false }
+]
+
+// Default day shift schedules:
+// Sunday: 08:00 – 15:30 (450 mins)
+// Monday – Thursday: 08:00 – 16:30 (510 mins)
+// Friday & Saturday: Non-Working days (off)
+const DEFAULT_DAY_SCHEDULES = {
+  0: { isWorkDay: true, startTime: '08:00', endTime: '15:30' },
+  1: { isWorkDay: true, startTime: '08:00', endTime: '16:30' },
+  2: { isWorkDay: true, startTime: '08:00', endTime: '16:30' },
+  3: { isWorkDay: true, startTime: '08:00', endTime: '16:30' },
+  4: { isWorkDay: true, startTime: '08:00', endTime: '16:30' },
+  5: { isWorkDay: false, startTime: '08:00', endTime: '16:30' },
+  6: { isWorkDay: false, startTime: '08:00', endTime: '16:30' }
+}
+
+// Convert "HH:MM" string into minutes from midnight
+const timeStringToMinutes = (timeStr) => {
+  if (!timeStr) return 0
+  const [h, m] = timeStr.split(':').map(Number)
+  return (h || 0) * 60 + (m || 0)
+}
+
+// Quick shift time presets for custom scheduling
+const SHIFT_PRESETS = [
+  { label: '08:00 – 16:30 (Standard)', start: '08:00', end: '16:30' },
+  { label: '08:00 – 15:30 (Sunday)', start: '08:00', end: '15:30' },
+  { label: '08:00 – 14:00 (Short Day)', start: '08:00', end: '14:00' },
+  { label: '07:00 – 15:30 (Early Shift)', start: '07:00', end: '15:30' },
+  { label: '09:00 – 17:30 (9-to-5)', start: '09:00', end: '17:30' },
+  { label: '12:00 – 20:00 (Evening Shift)', start: '12:00', end: '20:00' }
 ]
 
 // Master team roster in Blue, White & Gray tones
@@ -179,14 +213,133 @@ function App() {
     setTheme(prev => (prev === 'dark' ? 'light' : 'dark'))
   }
 
+  // Per-day custom schedules (persisted in localStorage)
+  const [daySchedules, setDaySchedules] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dispatch_day_schedules_v1')
+      if (saved) {
+        return JSON.parse(saved)
+      }
+    } catch (err) {
+      console.warn('Could not parse stored day schedules:', err)
+    }
+    return DEFAULT_DAY_SCHEDULES
+  })
+
+  // Synchronize custom schedules to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('dispatch_day_schedules_v1', JSON.stringify(daySchedules))
+    } catch (err) {
+      console.warn('Could not save day schedules to storage:', err)
+    }
+  }, [daySchedules])
+
+  // Computed days of week with live custom hours & metadata
+  const daysOfWeek = useMemo(() => {
+    return BASE_DAYS_META.map(meta => {
+      const sched = daySchedules[meta.key] || DEFAULT_DAY_SCHEDULES[meta.key]
+      const isWorkDay = !!sched.isWorkDay
+      const startTime = sched.startTime || '08:00'
+      const endTime = sched.endTime || '16:30'
+      const startMins = timeStringToMinutes(startTime)
+      const endMins = timeStringToMinutes(endTime)
+      const totalMinutes = isWorkDay ? Math.max(0, endMins - startMins) : 0
+      const hours = isWorkDay ? `${startTime} – ${endTime}` : 'Non-Working Day'
+
+      const def = DEFAULT_DAY_SCHEDULES[meta.key]
+      const isCustom =
+        sched.isWorkDay !== def.isWorkDay ||
+        sched.startTime !== def.startTime ||
+        sched.endTime !== def.endTime
+
+      return {
+        ...meta,
+        isWorkDay,
+        startTime,
+        endTime,
+        startMins,
+        endMins,
+        totalMinutes,
+        hours,
+        isCustom
+      }
+    })
+  }, [daySchedules])
+
+  // Custom Day Schedule Modal State
+  const [editingDayKey, setEditingDayKey] = useState(null)
+  const [editForm, setEditForm] = useState({
+    isWorkDay: true,
+    startTime: '08:00',
+    endTime: '16:30'
+  })
+
+  const openEditModal = (dayKey) => {
+    const target = daySchedules[dayKey] || DEFAULT_DAY_SCHEDULES[dayKey]
+    setEditingDayKey(dayKey)
+    setEditForm({
+      isWorkDay: target.isWorkDay,
+      startTime: target.startTime,
+      endTime: target.endTime
+    })
+  }
+
+  const closeEditModal = () => {
+    setEditingDayKey(null)
+  }
+
+  const handleSaveDaySchedule = (e) => {
+    if (e) e.preventDefault()
+    if (editingDayKey === null) return
+
+    // If day was switched to a work day and has no officers queued, auto-populate all 6
+    if (editForm.isWorkDay && (!dayQueues[editingDayKey] || dayQueues[editingDayKey].length === 0)) {
+      setDayQueues(prev => ({
+        ...prev,
+        [editingDayKey]: roster.map(p => p.id)
+      }))
+    }
+
+    setDaySchedules(prev => ({
+      ...prev,
+      [editingDayKey]: {
+        isWorkDay: editForm.isWorkDay,
+        startTime: editForm.startTime,
+        endTime: editForm.endTime
+      }
+    }))
+
+    setToastNotification({
+      title: 'Schedule Updated',
+      message: `Shift hours for ${BASE_DAYS_META[editingDayKey].name} set to ${editForm.isWorkDay ? `${editForm.startTime} – ${editForm.endTime}` : 'Non-Working Day'}.`,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    })
+
+    setEditingDayKey(null)
+  }
+
+  const handleResetDaySchedule = (dayKey) => {
+    const def = DEFAULT_DAY_SCHEDULES[dayKey]
+    setDaySchedules(prev => ({
+      ...prev,
+      [dayKey]: { ...def }
+    }))
+    setEditForm({
+      isWorkDay: def.isWorkDay,
+      startTime: def.startTime,
+      endTime: def.endTime
+    })
+  }
+
   // Active day config
-  const activeDay = DAYS_OF_WEEK.find(d => d.key === selectedDayKey) || DAYS_OF_WEEK[todayDayIndex]
+  const activeDay = daysOfWeek.find(d => d.key === selectedDayKey) || daysOfWeek[todayDayIndex]
   const isSelectedDayToday = selectedDayKey === todayDayIndex
 
   // Shift calculation parameters
-  const shiftStartMinutes = 8 * 60 // 08:00
-  const shiftEndMinutes = activeDay.isSunday ? 15 * 60 + 30 : 16 * 60 + 30 // 15:30 (Sun) or 16:30 (Mon-Thu)
-  const totalShiftMinutes = activeDay.isWorkDay ? shiftEndMinutes - shiftStartMinutes : 0
+  const shiftStartMinutes = activeDay.startMins
+  const shiftEndMinutes = activeDay.endMins
+  const totalShiftMinutes = activeDay.totalMinutes
 
   // Current selected day's queue of person IDs
   const currentDayQueueIds = dayQueues[selectedDayKey] || []
@@ -589,37 +742,64 @@ function App() {
             <h1 className="md-date-title">{formattedTodayDate}</h1>
           </div>
 
-          <div className="md-shift-chip">
-            <Clock size={15} color="var(--md-sys-color-primary)" />
-            <span>
-              {activeDay.name}:{' '}
-              <strong>{activeDay.hours}</strong>{' '}
-              ({activeDay.isSunday ? 'Sunday Hours' : activeDay.isWorkDay ? 'Work Day' : 'Weekend / Off'})
-            </span>
+          <div className="md-shift-chip-row">
+            <div className="md-shift-chip">
+              <Clock size={15} color="var(--md-sys-color-primary)" />
+              <span>
+                {activeDay.name}:{' '}
+                <strong>{activeDay.hours}</strong>{' '}
+                ({activeDay.isCustom ? 'Custom Schedule' : activeDay.isSunday ? 'Sunday Hours' : activeDay.isWorkDay ? 'Work Day' : 'Weekend / Off'})
+              </span>
+              {activeDay.isCustom && <span className="md-custom-badge">CUSTOM</span>}
+            </div>
+
+            <button
+              className="md-button md-button-tonal md-edit-hours-btn"
+              onClick={() => openEditModal(activeDay.key)}
+              title={`Edit shift hours for ${activeDay.name}`}
+            >
+              <Sliders size={14} />
+              <span>Edit {activeDay.name} Hours</span>
+            </button>
           </div>
         </section>
 
-        {/* 7-Day Material Filter Chips */}
+        {/* 7-Day Material Filter Chips with Quick Customization */}
         <section className="md-chip-group">
-          {DAYS_OF_WEEK.map(day => {
+          {daysOfWeek.map(day => {
             const isToday = day.key === todayDayIndex
             const isSelected = day.key === selectedDayKey
             const dayCount = (dayQueues[day.key] || []).length
 
             return (
-              <button
-                key={day.key}
-                className={`md-filter-chip ${isSelected ? 'is-selected' : ''} ${!day.isWorkDay ? 'is-off' : ''}`}
-                onClick={() => setSelectedDayKey(day.key)}
-              >
-                <div className="md-chip-name">
-                  <span>{day.name}</span>
-                  {isToday && <span className="md-chip-today-tag">TODAY</span>}
-                </div>
-                <span className="md-chip-sub">
-                  {day.isWorkDay ? `${day.hours.split(' ')[0]} • ${dayCount} on duty` : 'OFF DAY'}
-                </span>
-              </button>
+              <div key={day.key} className="md-filter-chip-wrapper">
+                <button
+                  className={`md-filter-chip ${isSelected ? 'is-selected' : ''} ${!day.isWorkDay ? 'is-off' : ''}`}
+                  onClick={() => setSelectedDayKey(day.key)}
+                  title={`View schedule for ${day.name}`}
+                >
+                  <div className="md-chip-name">
+                    <span>{day.name}</span>
+                    {isToday && <span className="md-chip-today-tag">TODAY</span>}
+                    {day.isCustom && <span className="md-chip-custom-tag">CUSTOM</span>}
+                  </div>
+                  <span className="md-chip-sub">
+                    {day.isWorkDay ? `${day.startTime}–${day.endTime} • ${dayCount} on duty` : 'OFF DAY'}
+                  </span>
+                </button>
+
+                <button
+                  className="md-chip-edit-icon-btn"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    openEditModal(day.key)
+                  }}
+                  title={`Customize ${day.name} hours`}
+                  aria-label={`Customize ${day.name} hours`}
+                >
+                  <Settings2 size={13} />
+                </button>
+              </div>
             )
           })}
         </section>
@@ -629,16 +809,24 @@ function App() {
           <section className="md-weekend-card">
             <Coffee size={44} color="var(--md-sys-color-primary)" />
             <h3>{activeDay.name} is a Non-Working Day</h3>
-            <p style={{ maxWidth: '440px', lineHeight: 1.5 }}>
-              Friday and Saturday are off days. Dispatch shifts run from <strong>Sunday (08:00 – 15:30)</strong> through <strong>Thursday (08:00 – 16:30)</strong>.
+            <p style={{ maxWidth: '460px', lineHeight: 1.5 }}>
+              This day is currently set to off. You can switch to an active workday or customize <strong>{activeDay.name}</strong> to add custom working hours.
             </p>
-            <button
-              className="md-button md-button-filled"
-              style={{ marginTop: '0.5rem' }}
-              onClick={() => setSelectedDayKey(todayDayIndex < 5 ? todayDayIndex : 0)}
-            >
-              Switch to Active Work Day
-            </button>
+            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+              <button
+                className="md-button md-button-filled"
+                onClick={() => openEditModal(activeDay.key)}
+              >
+                <Sliders size={15} />
+                <span>Configure Working Hours for {activeDay.name}</span>
+              </button>
+              <button
+                className="md-button md-button-tonal"
+                onClick={() => setSelectedDayKey(todayDayIndex < 5 && daysOfWeek[todayDayIndex].isWorkDay ? todayDayIndex : 0)}
+              >
+                Switch to Active Work Day
+              </button>
+            </div>
           </section>
         ) : (
           <>
@@ -980,6 +1168,207 @@ function App() {
           </>
         )}
       </main>
+
+      {/* Edit Day Schedule Material Dialog Modal */}
+      {editingDayKey !== null && (
+        <div className="md-modal-backdrop" onClick={closeEditModal}>
+          <div
+            className="md-dialog"
+            onClick={e => e.stopPropagation()}
+            role="dialog"
+            aria-labelledby="modal-title"
+          >
+            {/* Modal Header */}
+            <div className="md-dialog-header">
+              <div className="md-dialog-title-group">
+                <div className="md-dialog-icon">
+                  <Sliders size={20} />
+                </div>
+                <div>
+                  <h3 id="modal-title" className="md-dialog-title">
+                    Edit {BASE_DAYS_META[editingDayKey].name} Hours
+                  </h3>
+                  <p className="md-dialog-subtitle">
+                    Configure custom shift time window or working status for this specific day.
+                  </p>
+                </div>
+              </div>
+              <button
+                className="md-icon-button"
+                onClick={closeEditModal}
+                title="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleSaveDaySchedule} className="md-dialog-body">
+              {/* Working Day Status Toggle */}
+              <div className="md-form-field">
+                <label className="md-form-label">Day Shift Status</label>
+                <div className="md-segmented-control">
+                  <button
+                    type="button"
+                    className={`md-segment-btn ${editForm.isWorkDay ? 'is-active' : ''}`}
+                    onClick={() => setEditForm(prev => ({ ...prev, isWorkDay: true }))}
+                  >
+                    <Check size={15} />
+                    <span>Working Day</span>
+                  </button>
+                  <button
+                    type="button"
+                    className={`md-segment-btn ${!editForm.isWorkDay ? 'is-active is-off' : ''}`}
+                    onClick={() => setEditForm(prev => ({ ...prev, isWorkDay: false }))}
+                  >
+                    <Coffee size={15} />
+                    <span>Non-Working Day (Off)</span>
+                  </button>
+                </div>
+              </div>
+
+              {editForm.isWorkDay ? (
+                <>
+                  {/* Time Inputs */}
+                  <div className="md-time-inputs-grid">
+                    <div className="md-form-field">
+                      <label className="md-form-label" htmlFor="start-time-input">
+                        Shift Start Time
+                      </label>
+                      <div className="md-input-with-icon">
+                        <Clock size={16} />
+                        <input
+                          id="start-time-input"
+                          type="time"
+                          className="md-input md-time-input"
+                          value={editForm.startTime}
+                          onChange={e => setEditForm(prev => ({ ...prev, startTime: e.target.value }))}
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="md-form-field">
+                      <label className="md-form-label" htmlFor="end-time-input">
+                        Shift End Time
+                      </label>
+                      <div className="md-input-with-icon">
+                        <Clock size={16} />
+                        <input
+                          id="end-time-input"
+                          type="time"
+                          className="md-input md-time-input"
+                          value={editForm.endTime}
+                          onChange={e => setEditForm(prev => ({ ...prev, endTime: e.target.value }))}
+                          required
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Live Shift Division Calculation Card */}
+                  {(() => {
+                    const startM = timeStringToMinutes(editForm.startTime)
+                    const endM = timeStringToMinutes(editForm.endTime)
+                    const dur = endM - startM
+                    const officerCount = (dayQueues[editingDayKey] || []).length || roster.length
+
+                    if (dur <= 0) {
+                      return (
+                        <div className="md-calc-alert">
+                          <AlertCircle size={16} />
+                          <span>End time must be later than start time.</span>
+                        </div>
+                      )
+                    }
+
+                    return (
+                      <div className="md-calc-card">
+                        <div className="md-calc-stat">
+                          <span className="md-calc-label">Total Day Shift</span>
+                          <strong className="md-calc-value">{formatDuration(dur)}</strong>
+                        </div>
+                        <div className="md-calc-divider" />
+                        <div className="md-calc-stat">
+                          <span className="md-calc-label">Divided per Officer</span>
+                          <strong className="md-calc-value">
+                            {formatDuration(dur / officerCount)} each
+                          </strong>
+                          <span className="md-calc-sub">({officerCount} officers on duty)</span>
+                        </div>
+                      </div>
+                    )
+                  })()}
+
+                  {/* Quick Presets */}
+                  <div className="md-presets-section">
+                    <span className="md-presets-label">Quick Presets</span>
+                    <div className="md-presets-chips">
+                      {SHIFT_PRESETS.map((p, idx) => (
+                        <button
+                          key={idx}
+                          type="button"
+                          className="md-preset-chip"
+                          onClick={() => setEditForm(prev => ({
+                            ...prev,
+                            startTime: p.start,
+                            endTime: p.end
+                          }))}
+                        >
+                          {p.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="md-dialog-off-notice">
+                  <Coffee size={24} color="var(--md-sys-color-primary)" />
+                  <div>
+                    <strong>Marked as Non-Working Day</strong>
+                    <p>No dispatch shifts will run on this day. Personnel queue will remain on standby.</p>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal Footer Actions */}
+              <div className="md-dialog-footer">
+                <button
+                  type="button"
+                  className="md-button md-button-text"
+                  onClick={() => handleResetDaySchedule(editingDayKey)}
+                  title="Reset this day back to system defaults"
+                >
+                  <RotateCcw size={14} />
+                  <span>Reset Default</span>
+                </button>
+
+                <div className="md-dialog-action-buttons">
+                  <button
+                    type="button"
+                    className="md-button md-button-tonal"
+                    onClick={closeEditModal}
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    className="md-button md-button-filled"
+                    disabled={
+                      editForm.isWorkDay &&
+                      timeStringToMinutes(editForm.endTime) <= timeStringToMinutes(editForm.startTime)
+                    }
+                  >
+                    <Check size={15} />
+                    <span>Save Schedule</span>
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Minimal Full Screen Mode: Workers, Date, Time, Start/End Times, Time Left */}
       {isFullScreen && (
