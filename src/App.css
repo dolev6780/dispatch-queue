@@ -3226,6 +3226,525 @@
 }
 
 /* ==========================================================================
+   Application Shell — brand button, nav tabs, page wrapper
+   ========================================================================== */
+.md-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.md-nav-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 4px;
+  border-radius: var(--md-shape-full);
+  background: var(--md-sys-color-surface-container);
+  border: 1px solid var(--md-sys-color-outline);
+}
+
+.md-nav-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: 36px;
+  padding: 0 0.95rem;
+  border-radius: var(--md-shape-full);
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--md-sys-color-on-surface-variant);
+  transition: all var(--md-transition);
+  white-space: nowrap;
+}
+
+.md-nav-tab:hover:not(.is-active) {
+  color: var(--md-sys-color-on-surface);
+  background: var(--md-state-hover);
+}
+
+.md-nav-tab.is-active {
+  background: var(--gradient-primary);
+  color: var(--md-sys-color-on-primary);
+  box-shadow: var(--glow-primary);
+}
+
+.md-page {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* ==========================================================================
+   Home — hero and module grid
+   ========================================================================== */
+.md-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 1rem 0 0.25rem;
+}
+
+.md-hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--md-sys-color-primary);
+}
+
+.md-hero-title {
+  font-family: var(--md-font-display);
+  font-size: clamp(2.2rem, 5vw, 3.2rem);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  background: var(--gradient-text);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.md-hero-lede {
+  font-size: 1.02rem;
+  color: var(--md-sys-color-on-surface-variant);
+  max-width: 62ch;
+  line-height: 1.6;
+}
+
+.md-hero-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  margin-top: 0.6rem;
+}
+
+.md-hero-stat {
+  font-family: var(--md-font-mono);
+  font-size: 0.88rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.md-module-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.md-module-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.95rem;
+  text-align: left;
+  padding: 1.25rem;
+  border-radius: var(--md-shape-lg);
+  background-color: var(--md-sys-color-surface-container-low);
+  background-image: var(--gradient-panel);
+  border: 1px solid var(--md-sys-color-outline);
+  box-shadow: var(--md-elevation-1);
+  transition: all var(--md-transition);
+}
+
+.md-module-card:not(.is-soon):hover {
+  transform: translateY(-3px);
+  border-color: var(--md-sys-color-outline-strong);
+  box-shadow: var(--md-elevation-2), var(--glow-primary);
+}
+
+.md-module-card.is-soon {
+  opacity: 0.6;
+  cursor: not-allowed;
+  border-style: dashed;
+}
+
+.md-module-icon {
+  width: 46px;
+  height: 46px;
+  flex-shrink: 0;
+  border-radius: var(--md-shape-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-primary);
+  border: 1px solid var(--status-dispatch-border);
+}
+
+.md-module-card:not(.is-soon):hover .md-module-icon {
+  background: var(--gradient-primary);
+  color: var(--md-sys-color-on-primary);
+  border-color: transparent;
+}
+
+.md-module-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.md-module-text h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 1.05rem;
+  margin-bottom: 0.3rem;
+}
+
+.md-module-text p {
+  font-size: 0.86rem;
+  color: var(--md-sys-color-on-surface-variant);
+  line-height: 1.45;
+}
+
+.md-module-soon {
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.14rem 0.42rem;
+  border-radius: var(--md-shape-full);
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.md-module-arrow {
+  color: var(--md-sys-color-on-surface-variant);
+  flex-shrink: 0;
+  transition: transform var(--md-transition), color var(--md-transition);
+}
+
+.md-module-card:hover .md-module-arrow {
+  color: var(--md-sys-color-primary);
+  transform: translateX(3px);
+}
+
+/* ==========================================================================
+   Queue page header & day switcher
+   ========================================================================== */
+.md-queue-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1.15rem;
+}
+
+.md-queue-head-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.md-queue-head-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.md-queue-head-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.65rem;
+}
+
+.md-day-switch {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.md-day-switch-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 40px;
+  padding: 0 1rem;
+  border-radius: var(--md-shape-full);
+  background: var(--md-sys-color-surface-container);
+  border: 1px solid var(--md-sys-color-outline);
+  font-weight: 700;
+  font-size: 0.92rem;
+  color: var(--md-sys-color-on-surface);
+  transition: all var(--md-transition);
+}
+
+.md-day-switch-label:hover {
+  border-color: var(--md-sys-color-outline-strong);
+  box-shadow: var(--glow-primary);
+}
+
+.md-queue-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.md-day-picker {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.5rem;
+}
+
+/* ==========================================================================
+   Queue builder — single list, tap to add or remove
+   ========================================================================== */
+.md-builder {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.md-builder-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--md-sys-color-outline);
+}
+
+.md-builder-summary {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.md-builder-summary strong {
+  font-family: var(--md-font-mono);
+  font-size: 1.15rem;
+  color: var(--md-sys-color-primary);
+}
+
+.md-builder-each {
+  font-family: var(--md-font-mono);
+}
+
+.md-builder-note {
+  font-size: 0.85rem;
+  color: var(--md-sys-color-on-surface-variant);
+  background: var(--md-sys-color-surface-container);
+  border: 1px dashed var(--md-sys-color-outline);
+  border-radius: var(--md-shape-sm);
+  padding: 0.65rem 0.85rem;
+}
+
+.md-builder-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--md-sys-color-on-surface-variant);
+  margin-top: 0.35rem;
+}
+
+.md-builder-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  list-style: none;
+}
+
+.md-builder-row {
+  display: grid;
+  grid-template-columns: auto 30px 1fr auto auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 0.85rem;
+  border-radius: var(--md-shape-md);
+  background: var(--md-sys-color-surface-container);
+  border: 1px solid var(--md-sys-color-outline);
+  transition: all var(--md-transition);
+}
+
+.md-builder-row:hover {
+  border-color: var(--md-sys-color-outline-strong);
+}
+
+.md-builder-row.is-queued {
+  background: var(--md-sys-color-surface-container-high);
+}
+
+.md-builder-row.is-serving {
+  border-color: var(--md-sys-color-primary);
+  box-shadow: var(--glow-primary);
+}
+
+/* Tap target that doubles as the add/remove control */
+.md-builder-check {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: var(--md-shape-xs);
+  border: 2px solid var(--md-sys-color-outline-strong);
+  background: transparent;
+  color: var(--md-sys-color-on-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--md-transition);
+}
+
+.md-builder-check:hover {
+  border-color: var(--md-sys-color-primary);
+  background: var(--md-sys-color-primary-container);
+}
+
+.md-builder-check.is-on {
+  background: var(--gradient-primary);
+  border-color: transparent;
+  box-shadow: var(--glow-primary);
+}
+
+.md-builder-pos {
+  font-family: var(--md-font-mono);
+  font-size: 0.95rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--md-sys-color-primary);
+}
+
+.md-builder-pos.is-muted,
+.md-builder-name.is-muted,
+.md-builder-time.is-muted {
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.md-builder-name {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  font-size: 1.02rem;
+  font-weight: 600;
+  color: var(--md-sys-color-on-surface);
+  min-width: 0;
+}
+
+.md-builder-time {
+  font-family: var(--md-font-mono);
+  font-size: 0.92rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--md-sys-color-on-surface);
+  white-space: nowrap;
+}
+
+.md-builder-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.md-builder-bulk {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  padding-top: 0.35rem;
+}
+
+.md-button-text {
+  background: none;
+  color: var(--md-sys-color-on-surface-variant);
+  border: 1px solid transparent;
+}
+
+.md-button-text:hover:not(:disabled) {
+  color: var(--md-sys-color-on-surface);
+  background: var(--md-state-hover);
+}
+
+.md-builder-clear:hover:not(:disabled) {
+  color: var(--md-sys-color-error);
+}
+
+.md-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.md-bell-toast-time {
+  font-size: 0.74rem;
+  opacity: 0.75;
+  font-family: var(--md-font-mono);
+}
+
+/* ==========================================================================
+   Shell responsive
+   ========================================================================== */
+@media (max-width: 900px) {
+  .md-queue-head-actions {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .md-queue-tools {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 768px) {
+  .md-app-bar-content {
+    flex-wrap: wrap;
+    row-gap: 0.5rem;
+  }
+
+  .md-nav-tabs {
+    order: 3;
+    width: 100%;
+    justify-content: stretch;
+  }
+
+  .md-nav-tab {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .md-builder-row {
+    grid-template-columns: auto 24px 1fr auto;
+    row-gap: 0.4rem;
+  }
+
+  .md-builder-time {
+    grid-column: 3 / -1;
+    font-size: 0.82rem;
+  }
+
+  .md-day-picker {
+    display: flex;
+    overflow-x: auto;
+    gap: 0.5rem;
+  }
+
+  .md-day-picker .md-filter-chip {
+    flex: 0 0 96px;
+    min-width: 96px;
+  }
+
+  .md-module-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
    Entrance Motion
    Sections fade up in sequence on load. Deliberately scoped to the top-level
    panels only — animating list rows would restart on every drag reorder.

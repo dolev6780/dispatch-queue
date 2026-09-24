@@ -37,6 +37,39 @@ Beyond color, the theme layer adds glassmorphic surfaces, gradient accents with 
 - **Styling**: Vanilla CSS with Material Design 3 design tokens (fully tokenized — zero hardcoded colors)
 - **Audio**: Web Audio API procedural synthesis (zero audio files needed)
 
+## Structure
+
+The app is a small multi-module shell. Navigation is hash-based (`#/queue`) rather than history-based, because the site is served from a project subpath on GitHub Pages with no server-side rewrite — a deep link to `/dispatch-queue/queue` would 404, while `/dispatch-queue/#/queue` always resolves.
+
+```
+src/
+  App.jsx                  shell: routing, shared state wiring, modals
+  hooks/
+    useHashRoute.js        two-route hash router (no router dependency)
+    useDispatchData.js     synced state, daily reset, day rollover, clock
+  pages/
+    HomePage.jsx           NBLAB Management landing + module grid
+    QueuePage.jsx          today-focused queue management
+  components/
+    AppBar.jsx             brand, nav tabs, sync status, clock, theme
+    QueueBuilder.jsx       single-list queue builder
+    FullScreenBoard.jsx    wall-mounted display
+    DayScheduleDialog.jsx  per-weekday shift hours editor
+  services/
+    schedule.js            shift arithmetic (pure, tested)
+    dailyReset.js          daily reset policy (pure, tested)
+    firebase.js            Firestore sync + local cache
+    soundEffects.js        Web Audio turnover chimes
+```
+
+`schedule.js` and `dailyReset.js` are deliberately free of React and Firebase so the logic that decides *who is on duty* and *when the queue clears* can be tested directly:
+
+```bash
+npm test     # 53 assertions, no browser required
+```
+
+CI runs `lint` and `test` before every deploy.
+
 ## Local Development
 
 ```bash

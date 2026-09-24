@@ -1,209 +1,56 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react'
-import {
-  Radio,
-  Clock,
-  Sun,
-  Moon,
-  Plus,
-  ArrowUp,
-  ArrowDown,
-  Trash2,
-  Calendar,
-  CheckCircle,
-  AlertCircle,
-  Play,
-  GripVertical,
-  Users,
-  UserPlus,
-  Sparkles,
-  Coffee,
-  Maximize2,
-  Minimize2,
-  Bell,
-  BellOff,
-  Sliders,
-  RotateCcw,
-  Settings2,
-  Check,
-  X,
-  Cloud,
-  CloudOff,
-  RefreshCw,
-  Volume2,
-  Music,
-  Eye,
-  EyeOff
-} from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Bell } from 'lucide-react'
 import './App.css'
+
+import { AppBar } from './components/AppBar'
 import { FirebaseModal } from './components/FirebaseModal'
 import { SoundModal } from './components/SoundModal'
+import { FullScreenBoard } from './components/FullScreenBoard'
+import { DayScheduleDialog } from './components/DayScheduleDialog'
+import { HomePage } from './pages/HomePage'
+import { QueuePage } from './pages/QueuePage'
+
+import { useHashRoute } from './hooks/useHashRoute'
+import { useDispatchData } from './hooks/useDispatchData'
+import { playShiftSound, getSavedSoundChoice, saveSoundChoice } from './services/soundEffects'
+import { getConnectionState, onConnectionStatusChange } from './services/firebase'
 import {
-  playShiftSound,
-  getSavedSoundChoice,
-  saveSoundChoice
-} from './services/soundEffects'
-import {
-  subscribeToDispatchState,
-  saveDispatchState,
-  getConnectionState,
-  onConnectionStatusChange,
-  getLocalCachedState
-} from './services/firebase'
-import { toDateKey, resolveDailyReset } from './services/dailyReset'
-
-
-
-// Base metadata for all 7 weekdays
-const BASE_DAYS_META = [
-  { key: 0, name: 'Sunday', short: 'Sun', isSunday: true },
-  { key: 1, name: 'Monday', short: 'Mon', isSunday: false },
-  { key: 2, name: 'Tuesday', short: 'Tue', isSunday: false },
-  { key: 3, name: 'Wednesday', short: 'Wed', isSunday: false },
-  { key: 4, name: 'Thursday', short: 'Thu', isSunday: false },
-  { key: 5, name: 'Friday', short: 'Fri', isSunday: false },
-  { key: 6, name: 'Saturday', short: 'Sat', isSunday: false }
-]
-
-// Default day shift schedules:
-// Sunday: 08:00 – 15:30 (450 mins)
-// Monday – Thursday: 08:00 – 16:30 (510 mins)
-// Friday & Saturday: Non-Working days (off)
-const DEFAULT_DAY_SCHEDULES = {
-  0: { isWorkDay: true, startTime: '08:00', endTime: '15:30' },
-  1: { isWorkDay: true, startTime: '08:00', endTime: '16:30' },
-  2: { isWorkDay: true, startTime: '08:00', endTime: '16:30' },
-  3: { isWorkDay: true, startTime: '08:00', endTime: '16:30' },
-  4: { isWorkDay: true, startTime: '08:00', endTime: '16:30' },
-  5: { isWorkDay: false, startTime: '08:00', endTime: '16:30' },
-  6: { isWorkDay: false, startTime: '08:00', endTime: '16:30' }
-}
-
-// Convert "HH:MM" string into minutes from midnight
-const timeStringToMinutes = (timeStr) => {
-  if (!timeStr) return 0
-  const [h, m] = timeStr.split(':').map(Number)
-  return (h || 0) * 60 + (m || 0)
-}
-
-// Quick shift time presets for custom scheduling
-const SHIFT_PRESETS = [
-  { label: '08:00 – 16:30 (Standard)', start: '08:00', end: '16:30' },
-  { label: '08:00 – 15:30 (Sunday)', start: '08:00', end: '15:30' },
-  { label: '08:00 – 14:00 (Short Day)', start: '08:00', end: '14:00' },
-  { label: '07:00 – 15:30 (Early Shift)', start: '07:00', end: '15:30' },
-  { label: '09:00 – 17:30 (9-to-5)', start: '09:00', end: '17:30' },
-  { label: '12:00 – 20:00 (Evening Shift)', start: '12:00', end: '20:00' }
-]
-
-// Master team roster with Iris accent tones
-const INITIAL_ROSTER = [
-  { id: '1', name: 'Komer', role: 'Dispatch Specialist', color: '#818cf8' },
-  { id: '2', name: 'Alen', role: 'Dispatch Specialist', color: '#a78bfa' },
-  { id: '3', name: 'Dani', role: 'Dispatch Specialist', color: '#60a5fa' },
-  { id: '4', name: 'Yair', role: 'Dispatch Specialist', color: '#c084fc' },
-  { id: '5', name: 'Chen', role: 'Dispatch Specialist', color: '#e879f9' },
-  { id: '6', name: 'Dolev', role: 'Dispatch Specialist', color: '#6366f1' }
-]
-
-// Default day assignments (Sunday - Thursday work days with all 6 workers; Friday & Saturday off)
-const INITIAL_DAY_QUEUES = {
-  0: ['1', '2', '3', '4', '5', '6'], // Sunday crew (6 people)
-  1: ['1', '2', '3', '4', '5', '6'], // Monday crew
-  2: ['1', '2', '3', '4', '5', '6'], // Tuesday crew
-  3: ['1', '2', '3', '4', '5', '6'], // Wednesday crew
-  4: ['1', '2', '3', '4', '5', '6'], // Thursday crew (today)
-  5: [],                             // Friday (Not a work day)
-  6: []                              // Saturday (Not a work day)
-}
+  DEFAULT_DAY_SCHEDULES,
+  BASE_DAYS_META,
+  buildDaysOfWeek,
+  buildSchedule,
+  minutesSinceMidnight,
+  formatClockTime,
+  formatDuration
+} from './services/schedule'
 
 function App() {
   const [theme, setTheme] = useState('dark')
-  const [currentTime, setCurrentTime] = useState(new Date())
+  const [route, navigate] = useHashRoute('home')
 
-  // Real today day index (0 = Sunday, 1 = Monday, ..., 6 = Saturday).
-  // Derived from the ticking clock, not a one-off new Date(), so a wall
-  // display left running overnight notices the day change.
-  const todayDayIndex = currentTime.getDay()
-  const todayDateKey = toDateKey(currentTime)
+  const {
+    currentTime,
+    todayDayIndex,
+    roster,
+    setRoster,
+    dayQueues,
+    setDayQueues,
+    daySchedules,
+    setDaySchedules,
+    resubscribe
+  } = useDispatchData()
 
+  // ---- Theme -------------------------------------------------------------
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+  }, [theme])
+
+  // ---- Day selection, following the calendar ------------------------------
   const [selectedDayKey, setSelectedDayKey] = useState(() => new Date().getDay())
   const previousTodayRef = useRef(todayDayIndex)
 
-  const cachedInitial = useMemo(() => getLocalCachedState({
-    roster: INITIAL_ROSTER,
-    dayQueues: INITIAL_DAY_QUEUES,
-    daySchedules: DEFAULT_DAY_SCHEDULES
-  }), [])
-
-  // Roster, Day Queues and Schedules state (synced with Firebase and LocalStorage)
-  const [roster, setRoster] = useState(cachedInitial.roster)
-  const [dayQueues, setDayQueues] = useState(cachedInitial.dayQueues)
-  const [daySchedules, setDaySchedules] = useState(cachedInitial.daySchedules)
-  const [newRosterName, setNewRosterName] = useState('')
-
-  // Calendar date of the last automatic daily reset, shared across stations.
-  const [lastResetDate, setLastResetDate] = useState(cachedInitial.lastResetDate)
-  // Becomes true once the first state (remote or cached) has arrived. The
-  // daily reset waits on this so a station opening mid-morning cannot clear
-  // a queue another station already built for today.
-  const [isStateLoaded, setIsStateLoaded] = useState(false)
-
-  // Firebase Cloud Synchronization State
-  const [connectionState, setConnectionState] = useState(getConnectionState)
-  const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState(false)
-  const isRemoteUpdateRef = useRef(false)
-  const isInitialMountRefSync = useRef(true)
-
-  // Listen for real-time Firebase connection status changes
-  useEffect(() => {
-    return onConnectionStatusChange(setConnectionState)
-  }, [])
-
-  // Subscribe to real-time Cloud Firestore updates
-  useEffect(() => {
-    const unsubscribe = subscribeToDispatchState(
-      (remoteState) => {
-        // Mark loaded even for our own echo, so the daily reset is never
-        // left waiting on a snapshot that only ever comes back as self.
-        setIsStateLoaded(true)
-        if (!remoteState._fromSelf) {
-          isRemoteUpdateRef.current = true
-          if (remoteState.roster) setRoster(remoteState.roster)
-          if (remoteState.dayQueues) setDayQueues(remoteState.dayQueues)
-          if (remoteState.daySchedules) setDaySchedules(remoteState.daySchedules)
-          if (remoteState.lastResetDate) setLastResetDate(remoteState.lastResetDate)
-        }
-      },
-      {
-        roster: INITIAL_ROSTER,
-        dayQueues: INITIAL_DAY_QUEUES,
-        daySchedules: DEFAULT_DAY_SCHEDULES
-      }
-    )
-    return () => unsubscribe()
-  }, [])
-
-  // Persist mutations to Cloud Firestore and Local Cache
-  useEffect(() => {
-    if (isInitialMountRefSync.current) {
-      isInitialMountRefSync.current = false
-      return
-    }
-    if (isRemoteUpdateRef.current) {
-      isRemoteUpdateRef.current = false
-      return
-    }
-    saveDispatchState({
-      roster,
-      dayQueues,
-      daySchedules,
-      lastResetDate
-    })
-  }, [roster, dayQueues, daySchedules, lastResetDate])
-
-  // Follow the calendar day. If the viewer is looking at "today" when the
-  // date changes, move them to the new today; if they deliberately parked on
-  // another weekday, leave that selection alone.
+  // If the viewer is looking at "today" when the date changes, move them to
+  // the new today; if they deliberately parked on another weekday, leave it.
   useEffect(() => {
     if (previousTodayRef.current === todayDayIndex) return
     const previousToday = previousTodayRef.current
@@ -211,77 +58,153 @@ function App() {
     setSelectedDayKey(current => (current === previousToday ? todayDayIndex : current))
   }, [todayDayIndex])
 
-  // Daily queue reset — empty today's queue once per calendar day.
-  // Emptying is idempotent, so if two stations are open when the date turns
-  // they both write the same result and the states converge.
-  //
-  // The set-state-in-effect rule is disabled deliberately here: this effect
-  // synchronises with two external systems (the wall clock crossing midnight
-  // and the shared Firestore document) and the reset has to be persisted, so
-  // it cannot be derived during render. The decision itself lives in
-  // services/dailyReset.js and is unit tested.
-  /* oxlint-disable react/set-state-in-effect */
-  useEffect(() => {
-    const { action, date } = resolveDailyReset({
-      isStateLoaded,
-      lastResetDate,
-      todayDateKey
-    })
+  // ---- Derived schedule ---------------------------------------------------
+  const daysOfWeek = useMemo(() => buildDaysOfWeek(daySchedules), [daySchedules])
+  const activeDay = daysOfWeek.find(day => day.key === selectedDayKey) || daysOfWeek[todayDayIndex]
+  const isSelectedDayToday = selectedDayKey === todayDayIndex
 
-    if (action === 'wait' || action === 'none') return
+  const currentDayQueueIds = useMemo(
+    () => dayQueues[selectedDayKey] || [],
+    [dayQueues, selectedDayKey]
+  )
 
-    if (action === 'reset') {
-      setDayQueues(current => ({ ...current, [todayDayIndex]: [] }))
+  const queuedPersonnel = useMemo(
+    () => currentDayQueueIds.map(id => roster.find(p => p.id === id)).filter(Boolean),
+    [currentDayQueueIds, roster]
+  )
+
+  const availablePeople = useMemo(
+    () => roster.filter(person => !currentDayQueueIds.includes(person.id)),
+    [roster, currentDayQueueIds]
+  )
+
+  const nowMinutes = minutesSinceMidnight(currentTime)
+
+  const schedule = useMemo(
+    () => buildSchedule({
+      day: activeDay,
+      people: queuedPersonnel,
+      nowMinutes,
+      isToday: isSelectedDayToday
+    }),
+    [activeDay, queuedPersonnel, nowMinutes, isSelectedDayToday]
+  )
+
+  const minutesPerPerson = queuedPersonnel.length > 0 && activeDay.isWorkDay
+    ? activeDay.totalMinutes / queuedPersonnel.length
+    : 0
+
+  const currentServingPerson = schedule.find(person => person.status === 'serving')
+  const nextInLinePerson = schedule.find(person => person.status === 'up-next')
+  const currentServingIndex = schedule.findIndex(person => person.status === 'serving')
+
+  // Collapse earlier completed officers on the wall display so the current and
+  // previous officer stay large.
+  let earlierCompletedCount = 0
+  if (currentServingIndex > 1) {
+    earlierCompletedCount = currentServingIndex - 1
+  } else if (currentServingIndex === -1 && isSelectedDayToday) {
+    const firstUpcoming = schedule.findIndex(p => p.status === 'up-next' || p.status === 'scheduled')
+    if (firstUpcoming > 1) {
+      earlierCompletedCount = firstUpcoming - 1
+    } else if (firstUpcoming === -1 && schedule.length > 2) {
+      earlierCompletedCount = schedule.length - 2
     }
-    setLastResetDate(date)
-  }, [isStateLoaded, lastResetDate, todayDateKey, todayDayIndex])
-  /* oxlint-enable react/set-state-in-effect */
+  }
 
-  // Drag and Drop State
-  const [draggedItem, setDraggedItem] = useState(null)
-  const [dragOverZone, setDragOverZone] = useState(null)
-  const [dropTargetIndex, setDropTargetIndex] = useState(null)
+  // ---- Connection status --------------------------------------------------
+  const [connectionState, setConnectionState] = useState(getConnectionState)
+  const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState(false)
+  useEffect(() => onConnectionStatusChange(setConnectionState), [])
 
-  // Live real-time clock
+  // ---- Sound & turnover notification --------------------------------------
+  const [soundEnabled, setSoundEnabled] = useState(true)
+  const [selectedSoundId, setSelectedSoundId] = useState(getSavedSoundChoice)
+  const [isSoundModalOpen, setIsSoundModalOpen] = useState(false)
+  const [toast, setToast] = useState(null)
+  const previousServingIdRef = useRef(null)
+  const isFirstTurnoverCheckRef = useRef(true)
+
   useEffect(() => {
-    const timer = setInterval(() => setCurrentTime(new Date()), 1000)
-    return () => clearInterval(timer)
-  }, [])
+    if (!activeDay.isWorkDay) return
 
-  // Sync theme
+    const currentId = currentServingPerson
+      ? currentServingPerson.id
+      : (nowMinutes >= activeDay.endMins ? 'SHIFT_COMPLETED' : 'BEFORE_START')
+
+    // Never chime on the initial load.
+    if (isFirstTurnoverCheckRef.current) {
+      previousServingIdRef.current = currentId
+      isFirstTurnoverCheckRef.current = false
+      return
+    }
+
+    const previousId = previousServingIdRef.current
+    previousServingIdRef.current = currentId
+
+    if (!previousId || previousId === currentId) return
+    if (previousId === 'BEFORE_START' || previousId === 'SHIFT_COMPLETED') return
+
+    if (soundEnabled) playShiftSound(selectedSoundId)
+
+    const previousOfficer = roster.find(person => person.id === previousId)
+    const isDayDone = currentId === 'SHIFT_COMPLETED'
+
+    setToast({
+      title: isDayDone ? 'Day shift completed' : 'Shift over',
+      message: isDayDone
+        ? `All dispatch shifts have completed for ${activeDay.name}.`
+        : `${previousOfficer ? previousOfficer.name : 'Officer'}'s shift is over. Now on duty: ${currentServingPerson ? currentServingPerson.name : 'next officer'}.`,
+      time: formatClockTime(new Date())
+    })
+  }, [currentServingPerson, nowMinutes, soundEnabled, selectedSoundId, activeDay, roster])
+
+  // Auto-dismiss lives in its own effect keyed on the toast. Setting the timer
+  // inside the turnover effect above would not work: that effect re-runs every
+  // second with the clock, so its cleanup would clear the pending timer and the
+  // early-return path would never set a new one, leaving the toast up forever.
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-  }, [theme])
+    if (!toast) return
+    const timer = setTimeout(() => setToast(null), 8000)
+    return () => clearTimeout(timer)
+  }, [toast])
 
-  // Full Screen Mode state
+  const handleTestBell = () => {
+    playShiftSound(selectedSoundId)
+    setToast({
+      title: 'Turnover sound test',
+      message: currentServingPerson
+        ? `This is what plays when ${currentServingPerson.name}'s slot finishes.`
+        : 'This is what plays when a dispatch shift concludes.',
+      time: formatClockTime(new Date())
+    })
+  }
+
+  // ---- Full screen --------------------------------------------------------
   const [isFullScreen, setIsFullScreen] = useState(false)
   const [showAllInFullScreen, setShowAllInFullScreen] = useState(false)
 
-  const toggleFullScreen = () => {
-    if (!isFullScreen) {
-      if (document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen().catch(() => {})
-      }
-      setShowAllInFullScreen(false)
-      setIsFullScreen(true)
-    } else {
-      if (document.fullscreenElement && document.exitFullscreen) {
-        document.exitFullscreen().catch(() => {})
-      }
-      setIsFullScreen(false)
+  const enterFullScreen = () => {
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(() => {})
     }
+    setShowAllInFullScreen(false)
+    setIsFullScreen(true)
+  }
+
+  const exitFullScreen = () => {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {})
+    }
+    setIsFullScreen(false)
   }
 
   useEffect(() => {
     const handleFullScreenChange = () => {
-      if (!document.fullscreenElement && isFullScreen) {
-        setIsFullScreen(false)
-      }
+      if (!document.fullscreenElement && isFullScreen) setIsFullScreen(false)
     }
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && isFullScreen) {
-        setIsFullScreen(false)
-      }
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape' && isFullScreen) setIsFullScreen(false)
     }
     document.addEventListener('fullscreenchange', handleFullScreenChange)
     window.addEventListener('keydown', handleKeyDown)
@@ -291,49 +214,9 @@ function App() {
     }
   }, [isFullScreen])
 
-  const toggleTheme = () => {
-    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'))
-  }
-
-  // Computed days of week with live custom hours & metadata
-  const daysOfWeek = useMemo(() => {
-    return BASE_DAYS_META.map(meta => {
-      const sched = daySchedules[meta.key] || DEFAULT_DAY_SCHEDULES[meta.key]
-      const isWorkDay = !!sched.isWorkDay
-      const startTime = sched.startTime || '08:00'
-      const endTime = sched.endTime || '16:30'
-      const startMins = timeStringToMinutes(startTime)
-      const endMins = timeStringToMinutes(endTime)
-      const totalMinutes = isWorkDay ? Math.max(0, endMins - startMins) : 0
-      const hours = isWorkDay ? `${startTime} – ${endTime}` : 'Non-Working Day'
-
-      const def = DEFAULT_DAY_SCHEDULES[meta.key]
-      const isCustom =
-        sched.isWorkDay !== def.isWorkDay ||
-        sched.startTime !== def.startTime ||
-        sched.endTime !== def.endTime
-
-      return {
-        ...meta,
-        isWorkDay,
-        startTime,
-        endTime,
-        startMins,
-        endMins,
-        totalMinutes,
-        hours,
-        isCustom
-      }
-    })
-  }, [daySchedules])
-
-  // Custom Day Schedule Modal State
+  // ---- Day schedule dialog -------------------------------------------------
   const [editingDayKey, setEditingDayKey] = useState(null)
-  const [editForm, setEditForm] = useState({
-    isWorkDay: true,
-    startTime: '08:00',
-    endTime: '16:30'
-  })
+  const [editForm, setEditForm] = useState({ isWorkDay: true, startTime: '08:00', endTime: '16:30' })
 
   const openEditModal = (dayKey) => {
     const target = daySchedules[dayKey] || DEFAULT_DAY_SCHEDULES[dayKey]
@@ -345,24 +228,12 @@ function App() {
     })
   }
 
-  const closeEditModal = () => {
-    setEditingDayKey(null)
-  }
-
-  const handleSaveDaySchedule = (e) => {
-    if (e) e.preventDefault()
+  const handleSaveDaySchedule = (event) => {
+    if (event) event.preventDefault()
     if (editingDayKey === null) return
 
-    // If day was switched to a work day and has no officers queued, auto-populate all 6
-    if (editForm.isWorkDay && (!dayQueues[editingDayKey] || dayQueues[editingDayKey].length === 0)) {
-      setDayQueues(prev => ({
-        ...prev,
-        [editingDayKey]: roster.map(p => p.id)
-      }))
-    }
-
-    setDaySchedules(prev => ({
-      ...prev,
+    setDaySchedules(previous => ({
+      ...previous,
       [editingDayKey]: {
         isWorkDay: editForm.isWorkDay,
         startTime: editForm.startTime,
@@ -370,1326 +241,198 @@ function App() {
       }
     }))
 
-    setToastNotification({
-      title: 'Schedule Updated',
-      message: `Shift hours for ${BASE_DAYS_META[editingDayKey].name} set to ${editForm.isWorkDay ? `${editForm.startTime} – ${editForm.endTime}` : 'Non-Working Day'}.`,
+    setToast({
+      title: 'Hours updated',
+      message: `${BASE_DAYS_META[editingDayKey].name} set to ${editForm.isWorkDay ? `${editForm.startTime} – ${editForm.endTime}` : 'a day off'}.`,
       time: formatClockTime(new Date())
     })
-
     setEditingDayKey(null)
   }
 
-  const handleResetDaySchedule = (dayKey) => {
-    const def = DEFAULT_DAY_SCHEDULES[dayKey]
-    setDaySchedules(prev => ({
-      ...prev,
-      [dayKey]: { ...def }
+  const handleResetDaySchedule = () => {
+    if (editingDayKey === null) return
+    const def = DEFAULT_DAY_SCHEDULES[editingDayKey]
+    setEditForm({ isWorkDay: def.isWorkDay, startTime: def.startTime, endTime: def.endTime })
+  }
+
+  // ---- Queue mutations -----------------------------------------------------
+  const updateQueue = (updater) => {
+    setDayQueues(previous => ({
+      ...previous,
+      [selectedDayKey]: updater(previous[selectedDayKey] || [])
     }))
-    setEditForm({
-      isWorkDay: def.isWorkDay,
-      startTime: def.startTime,
-      endTime: def.endTime
-    })
   }
 
-  // Active day config
-  const activeDay = daysOfWeek.find(d => d.key === selectedDayKey) || daysOfWeek[todayDayIndex]
-  const isSelectedDayToday = selectedDayKey === todayDayIndex
-
-  // Shift calculation parameters
-  const shiftStartMinutes = activeDay.startMins
-  const shiftEndMinutes = activeDay.endMins
-  const totalShiftMinutes = activeDay.totalMinutes
-
-  // Current selected day's queue of person IDs
-  const currentDayQueueIds = dayQueues[selectedDayKey] || []
-
-  // Personnel in current day's queue
-  const queuedPersonnel = currentDayQueueIds
-    .map(id => roster.find(p => p.id === id))
-    .filter(Boolean)
-
-  // Personnel in roster pool (not currently assigned to selected day)
-  const availableRosterPersonnel = roster.filter(
-    p => !currentDayQueueIds.includes(p.id)
-  )
-
-  // Current real-time minutes from midnight
-  const nowMinutes =
-    currentTime.getHours() * 60 +
-    currentTime.getMinutes() +
-    currentTime.getSeconds() / 60
-
-  // Divide shift equally among chosen team members
-  const count = queuedPersonnel.length
-  const minutesPerPerson = count > 0 && activeDay.isWorkDay ? totalShiftMinutes / count : 0
-
-  // Helper: Format minutes into HH:MM
-  const formatTime = (totalMins) => {
-    const h = Math.floor(totalMins / 60)
-    const m = Math.floor(totalMins % 60)
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
-  }
-
-  // Helper: Format duration with hours and minutes
-  const formatDuration = (mins, forceHours = true) => {
-    const total = Math.max(0, Math.round(mins))
-    const h = Math.floor(total / 60)
-    const m = total % 60
-    if (h === 0 && !forceHours) return `${m}m`
-    return `${h}h ${String(m).padStart(2, '0')}m`
-  }
-
-  // Helper: Format countdown and remaining time with hours and minutes
-  const formatTimeRemaining = (mins) => {
-    const total = Math.max(0, Math.ceil(mins))
-    const h = Math.floor(total / 60)
-    const m = total % 60
-    return `${h}h ${String(m).padStart(2, '0')}m`
-  }
-
-  // Helper: Format clock in 24h format (HH:MM:SS or HH:MM)
-  const formatClockTime = (date, includeSeconds = true) => {
-    return date.toLocaleTimeString([], {
-      hour: '2-digit',
-      minute: '2-digit',
-      ...(includeSeconds ? { second: '2-digit' } : {}),
-      hour12: false
-    })
-  }
-
-  // Generate continuous schedule if it is a work day
-  const schedule = activeDay.isWorkDay
-    ? queuedPersonnel.map((person, index) => {
-        const startMins = Math.round(shiftStartMinutes + index * minutesPerPerson)
-        const endMins =
-          index === count - 1
-            ? shiftEndMinutes
-            : Math.round(shiftStartMinutes + (index + 1) * minutesPerPerson)
-
-        const durationMins = endMins - startMins
-
-        let status = 'scheduled'
-        let progressPercent = 0
-        let remainingMinutes = 0
-
-        if (isSelectedDayToday) {
-          if (nowMinutes >= startMins && nowMinutes < endMins) {
-            status = 'serving'
-            progressPercent = Math.min(
-              100,
-              Math.max(0, ((nowMinutes - startMins) / durationMins) * 100)
-            )
-            remainingMinutes = Math.max(0, Math.ceil(endMins - nowMinutes))
-          } else if (nowMinutes >= endMins) {
-            status = 'completed'
-            progressPercent = 100
-          } else if (nowMinutes < startMins) {
-            if (nowMinutes < shiftStartMinutes && index === 0) {
-              status = 'up-next'
-            } else if (index > 0 && nowMinutes >= Math.round(shiftStartMinutes + (index - 1) * minutesPerPerson)) {
-              status = 'up-next'
-            } else {
-              status = 'scheduled'
-            }
-          }
-        } else {
-          status = index === 0 ? 'up-next' : 'scheduled'
-        }
-
-        return {
-          ...person,
-          position: index + 1,
-          startMins,
-          endMins,
-          startTimeStr: formatTime(startMins),
-          endTimeStr: formatTime(endMins),
-          durationStr: formatDuration(durationMins),
-          status,
-          progressPercent,
-          remainingMinutes
-        }
-      })
-    : []
-
-  // Find person currently serving
-  const currentServingPerson = schedule.find(p => p.status === 'serving')
-  const nextInLinePerson = schedule.find(p => p.status === 'up-next')
-  const currentServingIndex = schedule.findIndex(p => p.status === 'serving')
-
-  // In full-screen mode, always show the current worker and the worker directly above them (hide earlier completed officers)
-  let earlierCompletedCount = 0
-  if (currentServingIndex > 1) {
-    earlierCompletedCount = currentServingIndex - 1
-  } else if (currentServingIndex === -1 && isSelectedDayToday) {
-    const firstUpcomingIdx = schedule.findIndex(p => p.status === 'up-next' || p.status === 'scheduled')
-    if (firstUpcomingIdx > 1) {
-      earlierCompletedCount = firstUpcomingIdx - 1
-    } else if (firstUpcomingIdx === -1 && schedule.length > 2) {
-      earlierCompletedCount = schedule.length - 2
-    }
-  }
-
-  const fullScreenSchedule = (showAllInFullScreen || earlierCompletedCount <= 0)
-    ? schedule
-    : schedule.slice(earlierCompletedCount)
-
-  // Bell Sound and Shift Turnover Notification
-  const [soundEnabled, setSoundEnabled] = useState(true)
-  const [selectedSoundId, setSelectedSoundId] = useState(getSavedSoundChoice)
-  const [isSoundModalOpen, setIsSoundModalOpen] = useState(false)
-  const [toastNotification, setToastNotification] = useState(null)
-  const previousServingIdRef = useRef(null)
-  const isInitialMountRef = useRef(true)
-
-  const handleSelectSound = (soundId) => {
-    setSelectedSoundId(soundId)
-    saveSoundChoice(soundId)
-  }
-
-  // Monitor shift turnover and trigger turnover sound
-  useEffect(() => {
-    if (!activeDay.isWorkDay) return
-
-    const currentId = currentServingPerson
-      ? currentServingPerson.id
-      : (nowMinutes >= shiftEndMinutes ? 'SHIFT_COMPLETED' : 'BEFORE_START')
-
-    // Do not trigger sound on initial page load
-    if (isInitialMountRef.current) {
-      previousServingIdRef.current = currentId
-      isInitialMountRef.current = false
-      return
-    }
-
-    // Trigger turnover alert when a shift concludes
-    if (previousServingIdRef.current && previousServingIdRef.current !== currentId) {
-      const prevOfficer = roster.find(p => p.id === previousServingIdRef.current)
-
-      if (previousServingIdRef.current !== 'BEFORE_START' && previousServingIdRef.current !== 'SHIFT_COMPLETED') {
-        if (soundEnabled) {
-          playShiftSound(selectedSoundId)
-        }
-
-        const isDayDone = currentId === 'SHIFT_COMPLETED'
-        const title = isDayDone ? 'Day Shift Completed' : 'Shift Over'
-        const message = isDayDone
-          ? `All dispatch shifts have completed for ${activeDay.name}!`
-          : `${prevOfficer ? prevOfficer.name : 'Officer'}'s dispatch shift is over! Next in service: ${currentServingPerson ? currentServingPerson.name : 'Next officer'}.`
-
-        setToastNotification({
-          title,
-          message,
-          time: formatClockTime(new Date())
-        })
-
-        const timer = setTimeout(() => setToastNotification(null), 8000)
-        previousServingIdRef.current = currentId
-        return () => clearTimeout(timer)
-      }
-    }
-
-    previousServingIdRef.current = currentId
-  }, [currentServingPerson, nowMinutes, shiftEndMinutes, soundEnabled, selectedSoundId, activeDay.isWorkDay, activeDay.name, roster])
-
-  const toggleSound = () => {
-    setSoundEnabled(prev => !prev)
-  }
-
-  const handleTestBell = () => {
-    playShiftSound(selectedSoundId)
-    setToastNotification({
-      title: 'Shift Over Alert Test',
-      message: currentServingPerson
-        ? `Turnover alert test: Signals when ${currentServingPerson.name}'s slot finishes.`
-        : 'Turnover alert test: Signals when dispatch shifts conclude.',
-      time: formatClockTime(new Date())
-    })
-  }
-
-  // =========================================================================
-  // Drag and Drop Handlers
-  // =========================================================================
-
-  const handleDragStart = (e, item) => {
-    setDraggedItem(item)
-    e.dataTransfer.setData('text/plain', item.id)
-    e.dataTransfer.effectAllowed = 'move'
-  }
-
-  const handleDragOverQueueZone = (e) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    setDragOverZone('queue')
-  }
-
-  const handleDragOverCard = (e, index) => {
-    e.preventDefault()
-    e.stopPropagation()
-    e.dataTransfer.dropEffect = 'move'
-    setDragOverZone('queue')
-    setDropTargetIndex(index)
-  }
-
-  const handleDragOverRosterZone = (e) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    setDragOverZone('roster')
-    setDropTargetIndex(null)
-  }
-
-  const handleDropOnQueue = (e) => {
-    e.preventDefault()
-    if (!draggedItem || !activeDay.isWorkDay) return
-
-    const currentList = [...(dayQueues[selectedDayKey] || [])]
-
-    if (draggedItem.source === 'roster') {
-      if (!currentList.includes(draggedItem.id)) {
-        if (dropTargetIndex !== null && dropTargetIndex >= 0) {
-          currentList.splice(dropTargetIndex, 0, draggedItem.id)
-        } else {
-          currentList.push(draggedItem.id)
-        }
-        setDayQueues({ ...dayQueues, [selectedDayKey]: currentList })
-      }
-    } else if (draggedItem.source === 'queue') {
-      if (dropTargetIndex !== null && dropTargetIndex !== draggedItem.index) {
-        const [movedId] = currentList.splice(draggedItem.index, 1)
-        currentList.splice(dropTargetIndex, 0, movedId)
-        setDayQueues({ ...dayQueues, [selectedDayKey]: currentList })
-      }
-    }
-
-    setDraggedItem(null)
-    setDragOverZone(null)
-    setDropTargetIndex(null)
-  }
-
-  const handleDropOnRoster = (e) => {
-    e.preventDefault()
-    if (!draggedItem) return
-
-    if (draggedItem.source === 'queue') {
-      const currentList = (dayQueues[selectedDayKey] || []).filter(id => id !== draggedItem.id)
-      setDayQueues({ ...dayQueues, [selectedDayKey]: currentList })
-    }
-
-    setDraggedItem(null)
-    setDragOverZone(null)
-    setDropTargetIndex(null)
-  }
-
-  const handleDragEnd = () => {
-    setDraggedItem(null)
-    setDragOverZone(null)
-    setDropTargetIndex(null)
-  }
-
-  // Quick Action Buttons
-  const handleAddToDay = (id) => {
-    if (!activeDay.isWorkDay) return
-    const currentList = [...(dayQueues[selectedDayKey] || [])]
-    if (!currentList.includes(id)) {
-      setDayQueues({ ...dayQueues, [selectedDayKey]: [...currentList, id] })
-    }
-  }
-
-  const handleRemoveFromDay = (id) => {
-    const currentList = (dayQueues[selectedDayKey] || []).filter(item => item !== id)
-    setDayQueues({ ...dayQueues, [selectedDayKey]: currentList })
+  const handleToggle = (personId) => {
+    updateQueue(list =>
+      list.includes(personId) ? list.filter(id => id !== personId) : [...list, personId]
+    )
   }
 
   const handleMove = (index, direction) => {
-    const targetIndex = index + direction
-    const currentList = [...(dayQueues[selectedDayKey] || [])]
-    if (targetIndex < 0 || targetIndex >= currentList.length) return
-    const temp = currentList[index]
-    currentList[index] = currentList[targetIndex]
-    currentList[targetIndex] = temp
-    setDayQueues({ ...dayQueues, [selectedDayKey]: currentList })
+    updateQueue(list => {
+      const target = index + direction
+      if (target < 0 || target >= list.length) return list
+      const next = [...list]
+      ;[next[index], next[target]] = [next[target], next[index]]
+      return next
+    })
   }
 
-  // Create new team member in roster
-  const handleAddRosterPerson = (e) => {
-    e.preventDefault()
-    if (!newRosterName.trim()) return
+  const handleAddAll = () => updateQueue(() => roster.map(person => person.id))
+  const handleClear = () => updateQueue(() => [])
 
+  const handleAddPerson = (name) => {
     const colors = ['#818cf8', '#a78bfa', '#60a5fa', '#c084fc', '#e879f9', '#6366f1', '#f0abfc']
-    const newColor = colors[roster.length % colors.length]
-
     const newPerson = {
       id: String(Date.now()),
-      name: newRosterName.trim(),
-      role: 'Service Dispatcher',
-      color: newColor
+      name,
+      role: 'Dispatch Specialist',
+      color: colors[roster.length % colors.length]
     }
-
-    setRoster([...roster, newPerson])
-    if (activeDay.isWorkDay) {
-      const currentList = [...(dayQueues[selectedDayKey] || [])]
-      setDayQueues({ ...dayQueues, [selectedDayKey]: [...currentList, newPerson.id] })
-    }
-    setNewRosterName('')
+    setRoster(previous => [...previous, newPerson])
+    updateQueue(list => [...list, newPerson.id])
   }
 
-  // Formatted date string for today
-  const formattedTodayDate = currentTime.toLocaleDateString([], {
+  // Removing someone from the team pulls them out of every day's queue too,
+  // otherwise they linger as an unresolvable id.
+  const handleRemovePerson = (personId) => {
+    setRoster(previous => previous.filter(person => person.id !== personId))
+    setDayQueues(previous => {
+      const next = {}
+      for (const [key, list] of Object.entries(previous)) {
+        next[key] = list.filter(id => id !== personId)
+      }
+      return next
+    })
+  }
+
+  // ---- Render --------------------------------------------------------------
+  const formattedDate = currentTime.toLocaleDateString([], {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
     year: 'numeric'
   })
 
+  const queueSummary = activeDay.isWorkDay && queuedPersonnel.length > 0
+    ? `${queuedPersonnel.length} in today's queue · ${formatDuration(minutesPerPerson)} each`
+    : null
+
+  if (isFullScreen) {
+    return (
+      <FullScreenBoard
+        activeDay={activeDay}
+        formattedDate={formattedDate}
+        currentTime={currentTime}
+        schedule={schedule}
+        earlierCompletedCount={earlierCompletedCount}
+        showAll={showAllInFullScreen}
+        onToggleShowAll={() => setShowAllInFullScreen(open => !open)}
+        nowMinutes={nowMinutes}
+        soundEnabled={soundEnabled}
+        onToggleSound={() => setSoundEnabled(on => !on)}
+        onTestBell={handleTestBell}
+        onExit={exitFullScreen}
+      />
+    )
+  }
+
   return (
     <div className="app-container">
-      {/* Shift Over Bell Toast Notification */}
-      {toastNotification && (
+      {toast && (
         <div className="md-bell-toast" role="alert">
           <div className="md-bell-toast-icon">
             <Bell size={20} className="bell-ringing" />
           </div>
           <div className="md-bell-toast-content">
             <strong>
-              <span>🔔 {toastNotification.title}</span>
-              <span style={{ fontSize: '0.74rem', opacity: 0.75, fontFamily: 'var(--md-font-mono)' }}>
-                {toastNotification.time}
-              </span>
+              <span>{toast.title}</span>
+              <span className="md-bell-toast-time">{toast.time}</span>
             </strong>
-            <p>{toastNotification.message}</p>
+            <p>{toast.message}</p>
           </div>
-          <button
-            className="md-bell-toast-close"
-            onClick={() => setToastNotification(null)}
-            title="Dismiss notification"
-          >
+          <button className="md-bell-toast-close" onClick={() => setToast(null)} aria-label="Dismiss">
             ✕
           </button>
         </div>
       )}
 
-      {/* Material Top App Bar */}
-      <header className="md-app-bar">
-        <div className="md-app-bar-content">
-          <div className="md-brand">
-            <div className="md-brand-icon">
-              <Radio size={20} />
-            </div>
-            <div className="md-brand-title">
-              nblabl12 <span className="md-brand-subtitle">Dispatch HQ</span>
-            </div>
-          </div>
+      <AppBar
+        route={route}
+        onNavigate={navigate}
+        theme={theme}
+        onToggleTheme={() => setTheme(current => (current === 'dark' ? 'light' : 'dark'))}
+        connectionState={connectionState}
+        onOpenFirebase={() => setIsFirebaseModalOpen(true)}
+        currentTime={currentTime}
+      />
 
-          <div className="md-app-bar-actions">
-            {/* Firebase Cloud Synchronization Status Chip */}
-            <button
-              className={`md-firebase-chip md-firebase-${connectionState.status}`}
-              onClick={() => setIsFirebaseModalOpen(true)}
-              title={`Cloud Sync Status: ${connectionState.status}. Click to open Firebase settings.`}
-            >
-              <span className="md-firebase-pulse-dot" />
-              {connectionState.status === 'connected' ? (
-                <>
-                  <Cloud size={14} />
-                  <span>Cloud Synced</span>
-                </>
-              ) : connectionState.status === 'connecting' ? (
-                <>
-                  <RefreshCw size={14} className="bell-ringing" />
-                  <span>Connecting...</span>
-                </>
-              ) : connectionState.status === 'error' ? (
-                <>
-                  <AlertCircle size={14} />
-                  <span>Sync Issue</span>
-                </>
-              ) : (
-                <>
-                  <CloudOff size={14} />
-                  <span>Local Mode</span>
-                </>
-              )}
-            </button>
-
-            <div className="md-clock-chip">
-              <span className="md-pulse-dot" />
-              <span>{formatClockTime(currentTime)}</span>
-            </div>
-
-            <button
-              className={`md-sound-btn ${soundEnabled ? 'is-active' : ''}`}
-              onClick={toggleSound}
-              title={soundEnabled ? 'Turnover sound is enabled (Click to mute)' : 'Turnover sound is muted (Click to enable)'}
-            >
-              {soundEnabled ? <Bell size={15} color="var(--md-sys-color-primary)" /> : <BellOff size={15} />}
-              <span>{soundEnabled ? 'Sound ON' : 'Muted'}</span>
-            </button>
-
-            <button
-              className="md-button md-button-tonal"
-              onClick={handleTestBell}
-              title="Test current shift turnover sound"
-            >
-              <Volume2 size={15} />
-              <span>Test Sound</span>
-            </button>
-
-            <button
-              className="md-button md-button-tonal"
-              onClick={() => setIsSoundModalOpen(true)}
-              title="Change worker turnover sound effect"
-            >
-              <Music size={15} />
-              <span>Change Sound</span>
-            </button>
-
-            <button
-              className="md-button md-button-tonal"
-              onClick={toggleFullScreen}
-              title="Full screen view of current day workers"
-            >
-              <Maximize2 size={16} />
-              <span>Full Screen</span>
-            </button>
-
-            <button
-              className="md-icon-button"
-              onClick={toggleTheme}
-              title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
-              aria-label="Toggle Theme"
-            >
-              {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-            </button>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content Area */}
       <main className="md-main-content">
-        {/* Prominent Current Day & Date Banner */}
-        <section className="md-header-section">
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.35rem' }}>
-              <Calendar size={15} color="var(--md-sys-color-primary)" />
-              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--md-sys-color-primary)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                Dispatch Schedule
-              </span>
-            </div>
-            <h1 className="md-date-title">{formattedTodayDate}</h1>
-          </div>
-
-          <div className="md-shift-chip-row">
-            <div className="md-shift-chip">
-              <Clock size={15} color="var(--md-sys-color-primary)" />
-              <span>
-                {activeDay.name}:{' '}
-                <strong>{activeDay.hours}</strong>{' '}
-                ({activeDay.isCustom ? 'Custom Schedule' : activeDay.isSunday ? 'Sunday Hours' : activeDay.isWorkDay ? 'Work Day' : 'Weekend / Off'})
-              </span>
-              {activeDay.isCustom && <span className="md-custom-badge">CUSTOM</span>}
-            </div>
-
-            <button
-              className="md-button md-button-tonal md-edit-hours-btn"
-              onClick={() => openEditModal(activeDay.key)}
-              title={`Edit shift hours for ${activeDay.name}`}
-            >
-              <Sliders size={14} />
-              <span>Edit {activeDay.name} Hours</span>
-            </button>
-          </div>
-        </section>
-
-        {/* 7-Day Material Filter Chips with Quick Customization */}
-        <section className="md-chip-group">
-          {daysOfWeek.map(day => {
-            const isToday = day.key === todayDayIndex
-            const isSelected = day.key === selectedDayKey
-            const dayCount = (dayQueues[day.key] || []).length
-
-            return (
-              <div key={day.key} className="md-filter-chip-wrapper">
-                <button
-                  className={`md-filter-chip ${isSelected ? 'is-selected' : ''} ${!day.isWorkDay ? 'is-off' : ''}`}
-                  onClick={() => setSelectedDayKey(day.key)}
-                  title={`View schedule for ${day.name}`}
-                >
-                  <div className="md-chip-name">
-                    <span className="md-chip-day-full">{day.name}</span>
-                    <span className="md-chip-day-short">{day.short}</span>
-                    {isToday && <span className="md-chip-today-tag">TODAY</span>}
-                    {day.isCustom && <span className="md-chip-custom-tag">CUSTOM</span>}
-                  </div>
-                  <div className="md-chip-sub">
-                    {day.isWorkDay ? (
-                      <>
-                        <span>{day.startTime}–{day.endTime}</span>
-                        <span className="md-chip-dot">•</span>
-                        <span>{dayCount} on duty</span>
-                      </>
-                    ) : (
-                      <span>OFF DAY</span>
-                    )}
-                  </div>
-                </button>
-
-                <button
-                  className="md-chip-edit-icon-btn"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    openEditModal(day.key)
-                  }}
-                  title={`Customize ${day.name} hours`}
-                  aria-label={`Customize ${day.name} hours`}
-                >
-                  <Settings2 size={13} />
-                </button>
-              </div>
-            )
-          })}
-        </section>
-
-        {/* If Selected Day is Friday or Saturday (Non-Working Day) */}
-        {!activeDay.isWorkDay ? (
-          <section className="md-weekend-card">
-            <Coffee size={44} color="var(--md-sys-color-primary)" />
-            <h3>{activeDay.name} is a Non-Working Day</h3>
-            <p style={{ maxWidth: '460px', lineHeight: 1.5 }}>
-              This day is currently set to off. You can switch to an active workday or customize <strong>{activeDay.name}</strong> to add custom working hours.
-            </p>
-            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
-              <button
-                className="md-button md-button-filled"
-                onClick={() => openEditModal(activeDay.key)}
-              >
-                <Sliders size={15} />
-                <span>Configure Working Hours for {activeDay.name}</span>
-              </button>
-              <button
-                className="md-button md-button-tonal"
-                onClick={() => setSelectedDayKey(todayDayIndex < 5 && daysOfWeek[todayDayIndex].isWorkDay ? todayDayIndex : 0)}
-              >
-                Switch to Active Work Day
-              </button>
-            </div>
-          </section>
+        {route === 'queue' ? (
+          <QueuePage
+            daysOfWeek={daysOfWeek}
+            activeDay={activeDay}
+            selectedDayKey={selectedDayKey}
+            onSelectDay={setSelectedDayKey}
+            todayDayIndex={todayDayIndex}
+            isSelectedDayToday={isSelectedDayToday}
+            formattedDate={formattedDate}
+            schedule={schedule}
+            availablePeople={availablePeople}
+            minutesPerPerson={minutesPerPerson}
+            currentServingPerson={currentServingPerson}
+            nextInLinePerson={nextInLinePerson}
+            nowMinutes={nowMinutes}
+            soundEnabled={soundEnabled}
+            onToggleSound={() => setSoundEnabled(on => !on)}
+            onTestBell={handleTestBell}
+            onOpenSoundModal={() => setIsSoundModalOpen(true)}
+            onOpenFullScreen={enterFullScreen}
+            onEditHours={() => openEditModal(selectedDayKey)}
+            onToggle={handleToggle}
+            onMove={handleMove}
+            onAddAll={handleAddAll}
+            onClear={handleClear}
+            onAddPerson={handleAddPerson}
+            onRemovePerson={handleRemovePerson}
+          />
         ) : (
-          <>
-            {/* Active Spotlight Card */}
-            <section className="md-spotlight-card">
-              <div className="md-spotlight-top">
-                <span className="md-badge md-badge-primary">
-                  <span className="md-pulse-dot" style={{ width: '6px', height: '6px' }} />
-                  {isSelectedDayToday && currentServingPerson
-                    ? 'Currently In Dispatch (Live)'
-                    : `${activeDay.name} Dispatch Status`}
-                </span>
-
-                {currentServingPerson && (
-                  <span className="md-shift-chip" style={{ height: '30px' }}>
-                    <Clock size={14} color="var(--md-sys-color-primary)" />
-                    {currentServingPerson.startTimeStr} – {currentServingPerson.endTimeStr}
-                  </span>
-                )}
-              </div>
-
-              <div className="md-spotlight-body">
-                {currentServingPerson ? (
-                  <>
-                    <div className="md-officer-info">
-                      <div className="md-avatar">
-                        {currentServingPerson.name.split(' ').map(n => n[0]).join('')}
-                      </div>
-                      <div className="md-officer-details">
-                        <h2>{currentServingPerson.name}</h2>
-                        <p>Position #{currentServingPerson.position} • {currentServingPerson.role}</p>
-                      </div>
-                    </div>
-
-                    <div className="md-countdown-display">
-                      <span className="md-countdown-label">Time Remaining</span>
-                      <span className="md-countdown-value">
-                        {formatTimeRemaining(currentServingPerson.remainingMinutes)}
-                      </span>
-                    </div>
-                  </>
-                ) : isSelectedDayToday && nowMinutes < shiftStartMinutes ? (
-                  <div className="md-officer-info">
-                    <div className="md-avatar" style={{ background: 'var(--status-queue)' }}>
-                      <Clock size={24} />
-                    </div>
-                    <div className="md-officer-details">
-                      <h2>Shift Starts at 08:00</h2>
-                      <p>
-                        {nextInLinePerson
-                          ? `Up first today: ${nextInLinePerson.name} (${nextInLinePerson.startTimeStr} – ${nextInLinePerson.endTimeStr})`
-                          : 'Drag personnel from the roster to schedule today.'}
-                      </p>
-                    </div>
-                  </div>
-                ) : isSelectedDayToday && nowMinutes >= shiftEndMinutes ? (
-                  <div className="md-officer-info">
-                    <div className="md-avatar" style={{ background: 'var(--status-completed)' }}>
-                      <CheckCircle size={24} />
-                    </div>
-                    <div className="md-officer-details">
-                      <h2>Day Work Shift Completed</h2>
-                      <p>All service slots for today have finished.</p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="md-officer-info">
-                    <div className="md-avatar" style={{ background: 'var(--md-sys-color-primary)' }}>
-                      <Calendar size={24} />
-                    </div>
-                    <div className="md-officer-details">
-                      <h2>{activeDay.name} Schedule View</h2>
-                      <p>
-                        {count > 0
-                          ? `${count} people scheduled • ${formatDuration(minutesPerPerson)} each • First up: ${queuedPersonnel[0]?.name}`
-                          : 'No people scheduled for this day yet. Drag from roster to assign.'}
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Slot Progress Bar */}
-              {currentServingPerson && (
-                <div className="md-linear-progress">
-                  <div className="md-linear-track">
-                    <div
-                      className="md-linear-bar"
-                      style={{ width: `${currentServingPerson.progressPercent}%` }}
-                    />
-                  </div>
-                  <div className="md-progress-meta">
-                    <span>Slot Start: {currentServingPerson.startTimeStr}</span>
-                    <span>{Math.round(currentServingPerson.progressPercent)}% elapsed</span>
-                    <span>Slot End: {currentServingPerson.endTimeStr}</span>
-                  </div>
-                </div>
-              )}
-            </section>
-
-            {/* Visual Timeline Bar */}
-            {count > 0 && (
-              <section className="md-timeline-card">
-                <div className="md-timeline-header">
-                  <span className="md-timeline-title">
-                    <Clock size={14} color="var(--md-sys-color-primary)" /> {activeDay.name} Timeline ({formatTime(shiftStartMinutes)} – {formatTime(shiftEndMinutes)})
-                  </span>
-                  <span className="md-timeline-sub">
-                    {formatDuration(minutesPerPerson)} / person ({count} equal slots)
-                  </span>
-                </div>
-
-                <div className="md-timeline-track">
-                  {schedule.map(person => (
-                    <div
-                      key={person.id}
-                      className={`md-timeline-segment ${
-                        person.status === 'serving'
-                          ? 'is-active'
-                          : person.status === 'completed'
-                          ? 'is-completed'
-                          : 'is-queue'
-                      }`}
-                      style={{ flex: 1 }}
-                      title={`${person.name}: ${person.startTimeStr} – ${person.endTimeStr}`}
-                    >
-                      #{person.position} {person.name.split(' ')[0]} ({person.startTimeStr})
-                    </div>
-                  ))}
-                </div>
-
-                <div className="md-timeline-legend">
-                  <span>{formatTime(shiftStartMinutes)}</span>
-                  {isSelectedDayToday ? (
-                    <span style={{ color: 'var(--md-sys-color-primary)', fontWeight: 600 }}>
-                      ▲ Current Time ({formatClockTime(currentTime, false)})
-                    </span>
-                  ) : (
-                    <span>{activeDay.name} Shift</span>
-                  )}
-                  <span>{formatTime(shiftEndMinutes)}</span>
-                </div>
-              </section>
-            )}
-
-            {/* Drag and Drop Workspace: Selected Day's Queue vs Team Roster */}
-            <div className="md-workspace-grid">
-              {/* Main Drop Zone: Day's Active Dispatch Queue */}
-              <section
-                className={`md-card ${dragOverZone === 'queue' ? 'drag-over-active' : ''}`}
-                onDragOver={handleDragOverQueueZone}
-                onDrop={handleDropOnQueue}
-              >
-                <div className="md-section-header">
-                  <div className="md-section-title">
-                    <Radio size={18} color="var(--md-sys-color-primary)" />
-                    <span>{activeDay.name}'s Dispatch Queue</span>
-                  </div>
-                  <span className="md-pill-duration">
-                    {count > 0 ? `${formatDuration(minutesPerPerson)} per person` : 'Queue Empty'}
-                  </span>
-                </div>
-
-                <div className="md-drag-hint">
-                  <Sparkles size={14} color="var(--md-sys-color-primary)" />
-                  <span>Drag cards here from the Team Roster or drag to reorder positions</span>
-                </div>
-
-                {schedule.length === 0 ? (
-                  <div className="md-empty-dropzone">
-                    <Users size={32} />
-                    <strong>Drop Team Members Here</strong>
-                    <p>Drag people from the available roster to add them to {activeDay.name}'s schedule.</p>
-                  </div>
-                ) : (
-                  <div className="md-list-stack">
-                    {schedule.map((person, index) => (
-                      <div
-                        key={person.id}
-                        draggable
-                        onDragStart={e => handleDragStart(e, { id: person.id, source: 'queue', index })}
-                        onDragOver={e => handleDragOverCard(e, index)}
-                        onDragEnd={handleDragEnd}
-                        className={`md-queue-row ${
-                          person.status === 'serving' ? 'is-active' : ''
-                        } ${draggedItem?.id === person.id ? 'is-dragging' : ''} ${
-                          dropTargetIndex === index && draggedItem?.id !== person.id
-                            ? 'drop-target-above'
-                            : ''
-                        }`}
-                      >
-                        <div className="md-row-left">
-                          <span className="md-grip-icon" title="Drag to reorder">
-                            <GripVertical size={16} />
-                          </span>
-                          <div className="md-pos-label">#{person.position}</div>
-                          <div className="md-person-meta">
-                            <div className="md-name-text">
-                              {person.name}
-                              {person.status === 'serving' && (
-                                <span className="md-status-pill md-status-serving">
-                                  <span className="md-pulse-dot" style={{ width: '6px', height: '6px' }} />
-                                  Serving Now
-                                </span>
-                              )}
-                            </div>
-                            <span className="md-person-role">{person.role}</span>
-                          </div>
-                        </div>
-
-                        <div className="md-row-center">
-                          <div className="md-time-tag">
-                            <Clock size={13} color="var(--md-sys-color-on-surface-variant)" />
-                            {person.startTimeStr} – {person.endTimeStr}
-                          </div>
-
-                          <span className="md-duration-tag">{person.durationStr}</span>
-
-                          {person.status === 'completed' && (
-                            <span className="md-status-pill md-status-finished">
-                              <CheckCircle size={11} /> Finished
-                            </span>
-                          )}
-                          {person.status === 'up-next' && (
-                            <span className="md-status-pill md-status-upnext">
-                              <Play size={10} /> Up Next
-                            </span>
-                          )}
-                          {person.status === 'scheduled' && (
-                            <span className="md-status-pill md-status-scheduled">Scheduled</span>
-                          )}
-                        </div>
-
-                        <div className="md-row-actions">
-                          <button
-                            className="md-btn-action"
-                            disabled={index === 0}
-                            onClick={() => handleMove(index, -1)}
-                            title="Move Up"
-                          >
-                            <ArrowUp size={13} />
-                          </button>
-                          <button
-                            className="md-btn-action"
-                            disabled={index === schedule.length - 1}
-                            onClick={() => handleMove(index, 1)}
-                            title="Move Down"
-                          >
-                            <ArrowDown size={13} />
-                          </button>
-                          <button
-                            className="md-btn-action btn-del"
-                            onClick={() => handleRemoveFromDay(person.id)}
-                            title="Remove from Today (return to roster)"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              {/* Roster Pool: Available Team Members */}
-              <section
-                className={`md-card ${dragOverZone === 'roster' ? 'drag-over-active' : ''}`}
-                onDragOver={handleDragOverRosterZone}
-                onDrop={handleDropOnRoster}
-              >
-                <div className="md-section-header">
-                  <div className="md-section-title">
-                    <Users size={18} color="var(--md-sys-color-primary)" />
-                    <span>Available Team Roster</span>
-                  </div>
-                  <span className="md-pill-duration">
-                    {availableRosterPersonnel.length} Available
-                  </span>
-                </div>
-
-                <div className="md-drag-hint">
-                  <span>Drag into {activeDay.name}'s queue or click "+ Add"</span>
-                </div>
-
-                <div className="md-list-stack">
-                  {availableRosterPersonnel.length === 0 ? (
-                    <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--md-sys-color-on-surface-variant)', fontSize: '0.85rem' }}>
-                      All team members are scheduled for {activeDay.name}!
-                    </div>
-                  ) : (
-                    availableRosterPersonnel.map(person => (
-                      <div
-                        key={person.id}
-                        draggable
-                        onDragStart={e => handleDragStart(e, { id: person.id, source: 'roster' })}
-                        onDragEnd={handleDragEnd}
-                        className={`md-roster-row ${
-                          draggedItem?.id === person.id ? 'is-dragging' : ''
-                        }`}
-                      >
-                        <div className="md-roster-meta">
-                          <span className="md-grip-icon" title="Drag into queue">
-                            <GripVertical size={14} />
-                          </span>
-                          <div className="md-roster-avatar">
-                            {person.name.split(' ').map(n => n[0]).join('')}
-                          </div>
-                          <div className="md-roster-text">
-                            <span className="md-roster-name">{person.name}</span>
-                            <span className="md-roster-role">{person.role}</span>
-                          </div>
-                        </div>
-
-                        <button
-                          className="md-btn-add-sm"
-                          onClick={() => handleAddToDay(person.id)}
-                          title={`Add ${person.name} to ${activeDay.name}`}
-                        >
-                          <Plus size={13} /> Add
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                {/* Quick Add New Person to Roster */}
-                <form className="md-register-box" onSubmit={handleAddRosterPerson}>
-                  <input
-                    type="text"
-                    className="md-input"
-                    placeholder="Register new person (e.g. Leo Clark)..."
-                    value={newRosterName}
-                    onChange={e => setNewRosterName(e.target.value)}
-                  />
-                  <button type="submit" className="md-button md-button-filled" style={{ height: '36px', padding: '0 0.85rem' }}>
-                    <UserPlus size={14} /> Add
-                  </button>
-                </form>
-              </section>
-            </div>
-          </>
+          <HomePage
+            onNavigate={navigate}
+            currentTime={currentTime}
+            queueSummary={queueSummary}
+          />
         )}
       </main>
 
-      {/* Edit Day Schedule Material Dialog Modal */}
       {editingDayKey !== null && (
-        <div className="md-modal-backdrop" onClick={closeEditModal}>
-          <div
-            className="md-dialog"
-            onClick={e => e.stopPropagation()}
-            role="dialog"
-            aria-labelledby="modal-title"
-          >
-            {/* Modal Header */}
-            <div className="md-dialog-header">
-              <div className="md-dialog-title-group">
-                <div className="md-dialog-icon">
-                  <Sliders size={20} />
-                </div>
-                <div>
-                  <h3 id="modal-title" className="md-dialog-title">
-                    Edit {BASE_DAYS_META[editingDayKey].name} Hours
-                  </h3>
-                  <p className="md-dialog-subtitle">
-                    Configure custom shift time window or working status for this specific day.
-                  </p>
-                </div>
-              </div>
-              <button
-                className="md-icon-button"
-                onClick={closeEditModal}
-                title="Close"
-              >
-                <X size={18} />
-              </button>
-            </div>
-
-            {/* Modal Form */}
-            <form onSubmit={handleSaveDaySchedule} className="md-dialog-body">
-              {/* Working Day Status Toggle */}
-              <div className="md-form-field">
-                <label className="md-form-label">Day Shift Status</label>
-                <div className="md-segmented-control">
-                  <button
-                    type="button"
-                    className={`md-segment-btn ${editForm.isWorkDay ? 'is-active' : ''}`}
-                    onClick={() => setEditForm(prev => ({ ...prev, isWorkDay: true }))}
-                  >
-                    <Check size={15} />
-                    <span>Working Day</span>
-                  </button>
-                  <button
-                    type="button"
-                    className={`md-segment-btn ${!editForm.isWorkDay ? 'is-active is-off' : ''}`}
-                    onClick={() => setEditForm(prev => ({ ...prev, isWorkDay: false }))}
-                  >
-                    <Coffee size={15} />
-                    <span>Non-Working Day (Off)</span>
-                  </button>
-                </div>
-              </div>
-
-              {editForm.isWorkDay ? (
-                <>
-                  {/* Time Inputs */}
-                  <div className="md-time-inputs-grid">
-                    <div className="md-form-field">
-                      <label className="md-form-label" htmlFor="start-time-input">
-                        Shift Start Time
-                      </label>
-                      <div className="md-input-with-icon">
-                        <Clock size={16} />
-                        <input
-                          id="start-time-input"
-                          type="time"
-                          className="md-input md-time-input"
-                          value={editForm.startTime}
-                          onChange={e => setEditForm(prev => ({ ...prev, startTime: e.target.value }))}
-                          required
-                        />
-                      </div>
-                    </div>
-
-                    <div className="md-form-field">
-                      <label className="md-form-label" htmlFor="end-time-input">
-                        Shift End Time
-                      </label>
-                      <div className="md-input-with-icon">
-                        <Clock size={16} />
-                        <input
-                          id="end-time-input"
-                          type="time"
-                          className="md-input md-time-input"
-                          value={editForm.endTime}
-                          onChange={e => setEditForm(prev => ({ ...prev, endTime: e.target.value }))}
-                          required
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Live Shift Division Calculation Card */}
-                  {(() => {
-                    const startM = timeStringToMinutes(editForm.startTime)
-                    const endM = timeStringToMinutes(editForm.endTime)
-                    const dur = endM - startM
-                    const officerCount = (dayQueues[editingDayKey] || []).length || roster.length
-
-                    if (dur <= 0) {
-                      return (
-                        <div className="md-calc-alert">
-                          <AlertCircle size={16} />
-                          <span>End time must be later than start time.</span>
-                        </div>
-                      )
-                    }
-
-                    return (
-                      <div className="md-calc-card">
-                        <div className="md-calc-stat">
-                          <span className="md-calc-label">Total Day Shift</span>
-                          <strong className="md-calc-value">{formatDuration(dur)}</strong>
-                        </div>
-                        <div className="md-calc-divider" />
-                        <div className="md-calc-stat">
-                          <span className="md-calc-label">Divided per Officer</span>
-                          <strong className="md-calc-value">
-                            {formatDuration(dur / officerCount)} each
-                          </strong>
-                          <span className="md-calc-sub">({officerCount} officers on duty)</span>
-                        </div>
-                      </div>
-                    )
-                  })()}
-
-                  {/* Quick Presets */}
-                  <div className="md-presets-section">
-                    <span className="md-presets-label">Quick Presets</span>
-                    <div className="md-presets-chips">
-                      {SHIFT_PRESETS.map((p, idx) => (
-                        <button
-                          key={idx}
-                          type="button"
-                          className="md-preset-chip"
-                          onClick={() => setEditForm(prev => ({
-                            ...prev,
-                            startTime: p.start,
-                            endTime: p.end
-                          }))}
-                        >
-                          {p.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="md-dialog-off-notice">
-                  <Coffee size={24} color="var(--md-sys-color-primary)" />
-                  <div>
-                    <strong>Marked as Non-Working Day</strong>
-                    <p>No dispatch shifts will run on this day. Personnel queue will remain on standby.</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Modal Footer Actions */}
-              <div className="md-dialog-footer">
-                <button
-                  type="button"
-                  className="md-button md-button-text"
-                  onClick={() => handleResetDaySchedule(editingDayKey)}
-                  title="Reset this day back to system defaults"
-                >
-                  <RotateCcw size={14} />
-                  <span>Reset Default</span>
-                </button>
-
-                <div className="md-dialog-action-buttons">
-                  <button
-                    type="button"
-                    className="md-button md-button-tonal"
-                    onClick={closeEditModal}
-                  >
-                    Cancel
-                  </button>
-
-                  <button
-                    type="submit"
-                    className="md-button md-button-filled"
-                    disabled={
-                      editForm.isWorkDay &&
-                      timeStringToMinutes(editForm.endTime) <= timeStringToMinutes(editForm.startTime)
-                    }
-                  >
-                    <Check size={15} />
-                    <span>Save Schedule</span>
-                  </button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
+        <DayScheduleDialog
+          dayName={BASE_DAYS_META[editingDayKey].name}
+          form={editForm}
+          onChange={setEditForm}
+          officerCount={(dayQueues[editingDayKey] || []).length}
+          onSubmit={handleSaveDaySchedule}
+          onReset={handleResetDaySchedule}
+          onClose={() => setEditingDayKey(null)}
+        />
       )}
 
-      {/* Minimal Full Screen Mode: Workers, Date, Time, Start/End Times, Time Left */}
-      {isFullScreen && (
-        <div className="md-fullscreen-overlay">
-          {/* Minimal Header */}
-          <div className="md-fs-header">
-            <div className="md-fs-header-top">
-              <div className="md-fs-date-block">
-                <div className="md-fs-date">{formattedTodayDate}</div>
-                <div className="md-fs-shift">
-                  <Clock size={20} />
-                  <span>
-                    {activeDay.name} Shift: {activeDay.hours} ({count} Officers)
-                  </span>
-                </div>
-              </div>
-
-              <div className="md-fs-controls">
-                <button
-                  className={`md-sound-btn ${soundEnabled ? 'is-active' : ''}`}
-                  onClick={toggleSound}
-                  title={soundEnabled ? 'Turnover sound is enabled' : 'Turnover sound is muted'}
-                >
-                  {soundEnabled ? <Bell size={18} color="var(--md-sys-color-primary)" /> : <BellOff size={18} />}
-                  <span>{soundEnabled ? 'Sound ON' : 'Muted'}</span>
-                </button>
-
-                <button className="md-button md-button-tonal" onClick={handleTestBell} title="Test Turnover Sound">
-                  <Volume2 size={18} />
-                  <span>Test Sound</span>
-                </button>
-
-                <button className="md-button md-button-tonal" onClick={toggleFullScreen} title="Exit Full Screen">
-                  <Minimize2 size={18} />
-                  <span>Exit</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Master Clock Banner - uses all available width in 24h format */}
-            <div className="md-fs-master-clock" title="Dispatch Master Time (24h)">
-              <span className="md-pulse-dot md-fs-pulse-dot" />
-              <span className="md-fs-clock-digits">
-                {formatClockTime(currentTime)}
-              </span>
-            </div>
-          </div>
-
-          {/* Focused Workers List: Always Shows Current Worker and Worker Directly Above */}
-          <div className="md-fs-list">
-            {earlierCompletedCount > 0 && (
-              <div className="md-fs-earlier-bar">
-                <button
-                  className="md-fs-earlier-btn"
-                  onClick={() => setShowAllInFullScreen(prev => !prev)}
-                  title={showAllInFullScreen ? 'Focus on current officer and previous officer' : 'Show all earlier completed officers'}
-                >
-                  {showAllInFullScreen ? <EyeOff size={18} /> : <Eye size={18} />}
-                  <span>
-                    {showAllInFullScreen
-                      ? 'Hide Earlier Completed Officers'
-                      : `Show ${earlierCompletedCount} Earlier Completed ${earlierCompletedCount === 1 ? 'Officer' : 'Officers'}`}
-                  </span>
-                </button>
-              </div>
-            )}
-
-            {/* After the daily reset the queue is empty until someone fills
-                it in, so the wall display needs to say so rather than show a
-                blank screen. */}
-            {fullScreenSchedule.length === 0 && (
-              <div className="md-fs-empty">
-                <div className="md-fs-empty-icon">
-                  <Users size={54} />
-                </div>
-                <h2>Queue cleared for {activeDay.name}</h2>
-                <p>
-                  {activeDay.isWorkDay
-                    ? 'No officers assigned yet. Add them from any connected station — this display updates live.'
-                    : `${activeDay.name} is not a working day.`}
-                </p>
-              </div>
-            )}
-
-            {fullScreenSchedule.map(person => {
-              const isServing = person.status === 'serving'
-              const isCompleted = person.status === 'completed'
-              const minsUntilStart = Math.max(0, Math.ceil(person.startMins - nowMinutes))
-
-              return (
-                <div
-                  key={person.id}
-                  className={`md-fs-row ${isServing ? 'is-active' : ''}`}
-                >
-                  {/* Left: Position & Name */}
-                  <div className="md-fs-left">
-                    <div className="md-fs-pos">#{person.position}</div>
-                    <div className="md-fs-name">{person.name}</div>
-                  </div>
-
-                  {/* Center: Start & End Time */}
-                  <div className="md-fs-center">
-                    <div className="md-fs-center-block">
-                      <span className="md-fs-center-label">Shift Window</span>
-                      <span className="md-fs-center-time">
-                        {person.startTimeStr} – {person.endTimeStr}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Right: How Long Left */}
-                  <div className="md-fs-right">
-                    {isServing ? (
-                      <div className="md-fs-time-left md-time-left-active">
-                        <span className="md-pulse-dot" style={{ width: '10px', height: '10px' }} />
-                        <span>{formatTimeRemaining(person.remainingMinutes)} left</span>
-                      </div>
-                    ) : isCompleted ? (
-                      <div className="md-fs-time-left md-time-left-done">
-                        <CheckCircle size={22} />
-                        <span>Finished</span>
-                      </div>
-                    ) : (
-                      <div className="md-fs-time-left md-time-left-upcoming">
-                        <Clock size={22} />
-                        <span>Starts in {formatTimeRemaining(minsUntilStart)}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Progress Line for Serving Officer */}
-                  {isServing && (
-                    <div
-                      className="md-fs-row-progress"
-                      style={{ width: `${person.progressPercent}%` }}
-                    />
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Firebase Cloud Synchronization & Settings Modal */}
       <FirebaseModal
         isOpen={isFirebaseModalOpen}
         onClose={() => setIsFirebaseModalOpen(false)}
         connectionState={connectionState}
-        onConfigChanged={() => {
-          subscribeToDispatchState(
-            (remoteState) => {
-              if (!remoteState._fromSelf) {
-                isRemoteUpdateRef.current = true
-                if (remoteState.roster) setRoster(remoteState.roster)
-                if (remoteState.dayQueues) setDayQueues(remoteState.dayQueues)
-                if (remoteState.daySchedules) setDaySchedules(remoteState.daySchedules)
-              }
-            },
-            {
-              roster: INITIAL_ROSTER,
-              dayQueues: INITIAL_DAY_QUEUES,
-              daySchedules: DEFAULT_DAY_SCHEDULES
-            }
-          )
-        }}
+        onConfigChanged={resubscribe}
       />
 
-      {/* Shift Turnover Sound Selector Modal */}
       <SoundModal
         isOpen={isSoundModalOpen}
         onClose={() => setIsSoundModalOpen(false)}
         selectedSoundId={selectedSoundId}
-        onSelectSound={handleSelectSound}
+        onSelectSound={(soundId) => {
+          setSelectedSoundId(soundId)
+          saveSoundChoice(soundId)
+        }}
       />
     </div>
   )

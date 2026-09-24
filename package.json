@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "node src/services/dailyReset.test.mjs"
+    "test": "node src/services/dailyReset.test.mjs && node src/services/schedule.test.mjs"
   },
   "dependencies": {
     "firebase": "^12.19.0",
