@@ -51,6 +51,8 @@ src/
   pages/
     HomePage.jsx           NBLAB Management landing + module grid
     QueuePage.jsx          today-focused queue management
+    SignInPage.jsx         work-ID sign-in + first-run admin bootstrap
+    AdminPage.jsx          team, work IDs, shift hours, danger zone
   components/
     AppBar.jsx             brand, nav tabs, sync status, clock, theme
     QueueBuilder.jsx       single-list queue builder
@@ -59,14 +61,15 @@ src/
   services/
     schedule.js            shift arithmetic (pure, tested)
     dailyReset.js          daily reset policy (pure, tested)
+    auth.js                work-ID hashing + session (pure, tested)
     firebase.js            Firestore sync + local cache
     soundEffects.js        Web Audio turnover chimes
 ```
 
-`schedule.js` and `dailyReset.js` are deliberately free of React and Firebase so the logic that decides *who is on duty* and *when the queue clears* can be tested directly:
+`schedule.js`, `dailyReset.js` and `auth.js` are deliberately free of React and Firebase so the logic that decides *who is on duty*, *when the queue clears* and *who may edit* can be tested directly:
 
 ```bash
-npm test     # 53 assertions, no browser required
+npm test     # 82 assertions, no browser required
 ```
 
 CI runs `lint` and `test` before every deploy.
@@ -77,6 +80,39 @@ CI runs `lint` and `test` before every deploy.
 npm install
 npm run dev
 ```
+
+## Sign-in & Administration 🔑
+
+**Viewing is public; editing needs a work ID.** That split is deliberate — the wall display can sit on the Queue page unattended and survive a reboot without anyone logging it back in.
+
+| | Signed out | Signed in | Administrator |
+| --- | --- | --- | --- |
+| See the board & full screen | ✅ | ✅ | ✅ |
+| Build and reorder the queue | — | ✅ | ✅ |
+| Edit shift hours | — | ✅ | ✅ |
+| Team, work IDs, danger zone | — | — | ✅ |
+
+### First run
+
+No administrator exists initially, so `#/signin` opens in **first-time setup**: pick your name, choose a work ID, and you become the administrator. This path closes itself the moment an admin exists — which is why there is no default password to forget to change.
+
+> ⚠️ Until someone claims it, **anyone who opens the site can claim the administrator slot.** Do it first, before sharing the URL.
+
+### Work IDs
+
+Set from the admin page. Only a **SHA-256 hash** is stored, never the ID itself, because the shared Firestore document is publicly readable and plaintext IDs would be harvestable by anyone who opened it. IDs therefore cannot be read back — setting one replaces it. Someone with no work ID simply cannot sign in.
+
+### What this does and does not protect
+
+This is a **soft gate plus attribution**: it records who changed the queue and stops passers-by editing the board.
+
+It is **not authentication**. There is no server-side check, so:
+
+- Firestore rules cannot verify a work ID — writes are still open to anyone who talks to the API directly.
+- The administrator flag is enforced in the UI only.
+- Hashing stops ID harvesting, but a short numeric ID is guessable offline.
+
+If the board ever needs real protection, replace this with Firebase Auth (Google or email/password) and tighten [`firestore.rules`](./firestore.rules) to require `request.auth != null`. The rules file already carries a note on exactly where that line goes.
 
 ## Firebase Cloud Sync 🔥
 

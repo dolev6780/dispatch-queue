@@ -8,9 +8,12 @@ import { FullScreenBoard } from './components/FullScreenBoard'
 import { DayScheduleDialog } from './components/DayScheduleDialog'
 import { HomePage } from './pages/HomePage'
 import { QueuePage } from './pages/QueuePage'
+import { SignInPage } from './pages/SignInPage'
+import { AdminPage } from './pages/AdminPage'
 
 import { useHashRoute } from './hooks/useHashRoute'
-import { useDispatchData } from './hooks/useDispatchData'
+import { useDispatchData, INITIAL_ROSTER } from './hooks/useDispatchData'
+import { readSession, writeSession, clearSession, resolveSession } from './services/auth'
 import { playShiftSound, getSavedSoundChoice, saveSoundChoice } from './services/soundEffects'
 import { getConnectionState, onConnectionStatusChange } from './services/firebase'
 import {
@@ -113,6 +116,38 @@ function App() {
   // ---- Connection status --------------------------------------------------
   const [connectionState, setConnectionState] = useState(getConnectionState)
   useEffect(() => onConnectionStatusChange(setConnectionState), [])
+
+  // ---- Session ------------------------------------------------------------
+  // Only the member id is stored. Name and admin rights are re-derived from
+  // the live roster every render, so a tampered localStorage cannot invent an
+  // administrator by itself.
+  const [storedSession, setStoredSession] = useState(readSession)
+  const session = useMemo(() => resolveSession(storedSession, roster), [storedSession, roster])
+  const canEdit = !!session
+
+  const handleSignedIn = (memberId) => {
+    setStoredSession(writeSession(memberId))
+    navigate('queue')
+  }
+
+  const handleSignOut = () => {
+    clearSession()
+    setStoredSession(null)
+    navigate('queue')
+  }
+
+  // First-run bootstrap: the first person to claim a work ID becomes admin.
+  const handleSetupAdmin = (memberId, workIdHash) => {
+    setRoster(previous => previous.map(person =>
+      person.id === memberId ? { ...person, workIdHash, isAdmin: true } : person
+    ))
+  }
+
+  const handleUpdateMember = (memberId, patch) => {
+    setRoster(previous => previous.map(person =>
+      person.id === memberId ? { ...person, ...patch } : person
+    ))
+  }
 
   // ---- Sound & turnover notification --------------------------------------
   const [soundEnabled, setSoundEnabled] = useState(true)
@@ -279,7 +314,7 @@ function App() {
   const handleAddAll = () => updateQueue(() => roster.map(person => person.id))
   const handleClear = () => updateQueue(() => [])
 
-  const handleAddPerson = (name) => {
+  const createMember = (name) => {
     const colors = ['#818cf8', '#a78bfa', '#60a5fa', '#c084fc', '#e879f9', '#6366f1', '#f0abfc']
     const newPerson = {
       id: String(Date.now()),
@@ -288,8 +323,18 @@ function App() {
       color: colors[roster.length % colors.length]
     }
     setRoster(previous => [...previous, newPerson])
-    updateQueue(list => [...list, newPerson.id])
+    return newPerson
   }
+
+  // From the queue builder: adding someone there means you want them working
+  // today, so they go straight into the queue.
+  const handleAddPerson = (name) => {
+    const person = createMember(name)
+    updateQueue(list => [...list, person.id])
+  }
+
+  // From the admin page: managing the team is separate from today's queue.
+  const handleAddMemberOnly = (name) => createMember(name)
 
   // Removing someone from the team pulls them out of every day's queue too,
   // otherwise they linger as an unresolvable id.
@@ -302,6 +347,21 @@ function App() {
       }
       return next
     })
+    // Sign out anyone whose own record was just deleted.
+    if (storedSession?.id === personId) handleSignOut()
+  }
+
+  // ---- Danger zone ---------------------------------------------------------
+  const handleResetTodayQueue = () =>
+    setDayQueues(previous => ({ ...previous, [todayDayIndex]: [] }))
+
+  const handleClearAllQueues = () =>
+    setDayQueues(Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map(key => [key, []])))
+
+  const handleRestoreDefaultRoster = () => {
+    setRoster(INITIAL_ROSTER)
+    setDayQueues(Object.fromEntries([0, 1, 2, 3, 4, 5, 6].map(key => [key, []])))
+    handleSignOut()
   }
 
   // ---- Render --------------------------------------------------------------
@@ -362,11 +422,47 @@ function App() {
         onToggleTheme={() => setTheme(current => (current === 'dark' ? 'light' : 'dark'))}
         connectionState={connectionState}
         currentTime={currentTime}
+        session={session}
+        onSignOut={handleSignOut}
       />
 
       <main className="md-main-content">
-        {route === 'queue' ? (
+        {route === 'signin' ? (
+          <SignInPage
+            roster={roster}
+            onSignedIn={handleSignedIn}
+            onNavigate={navigate}
+            onSetupAdmin={handleSetupAdmin}
+          />
+        ) : route === 'admin' ? (
+          // Guard rather than hide: a bookmarked #/admin must not render for
+          // someone who is not an administrator.
+          session?.isAdmin ? (
+            <AdminPage
+              roster={roster}
+              daysOfWeek={daysOfWeek}
+              dayQueues={dayQueues}
+              session={session}
+              onUpdateMember={handleUpdateMember}
+              onAddMember={handleAddMemberOnly}
+              onRemoveMember={handleRemovePerson}
+              onEditDayHours={openEditModal}
+              onResetTodayQueue={handleResetTodayQueue}
+              onClearAllQueues={handleClearAllQueues}
+              onRestoreDefaultRoster={handleRestoreDefaultRoster}
+            />
+          ) : (
+            <SignInPage
+              roster={roster}
+              onSignedIn={handleSignedIn}
+              onNavigate={navigate}
+              onSetupAdmin={handleSetupAdmin}
+            />
+          )
+        ) : route === 'queue' ? (
           <QueuePage
+            canEdit={canEdit}
+            onRequestSignIn={() => navigate('signin')}
             daysOfWeek={daysOfWeek}
             activeDay={activeDay}
             selectedDayKey={selectedDayKey}

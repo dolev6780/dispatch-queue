@@ -3444,6 +3444,358 @@
 }
 
 /* ==========================================================================
+   Session chip & sign-in
+   ========================================================================== */
+.md-session-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 38px;
+  padding: 0 0.4rem 0 0.4rem;
+  border-radius: var(--md-shape-full);
+  background: var(--md-sys-color-surface-container);
+  border: 1px solid var(--md-sys-color-outline);
+  white-space: nowrap;
+}
+
+.md-session-avatar {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gradient-primary);
+  color: var(--md-sys-color-on-primary);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.md-session-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--md-sys-color-on-surface);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.md-session-admin {
+  color: var(--md-sys-color-primary);
+  flex-shrink: 0;
+}
+
+.md-auth-page {
+  align-items: center;
+  justify-content: center;
+  min-height: 62vh;
+}
+
+.md-auth-card {
+  width: 100%;
+  max-width: 420px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.6rem;
+  padding: 2.25rem 1.85rem;
+  border-radius: var(--md-shape-lg);
+  background-color: var(--md-sys-color-surface-container);
+  background-image: var(--gradient-card);
+  border: 1px solid var(--md-sys-color-outline);
+  box-shadow: var(--md-elevation-2), var(--glow-primary);
+}
+
+.md-auth-icon {
+  width: 60px;
+  height: 60px;
+  border-radius: var(--md-shape-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gradient-primary-vivid);
+  color: var(--md-sys-color-on-primary);
+  box-shadow: var(--glow-primary-strong);
+  margin-bottom: 0.35rem;
+}
+
+.md-auth-title {
+  font-family: var(--md-font-display);
+  font-size: 1.7rem;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+}
+
+.md-auth-lede {
+  font-size: 0.9rem;
+  color: var(--md-sys-color-on-surface-variant);
+  line-height: 1.5;
+}
+
+.md-auth-form {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  margin-top: 0.85rem;
+  text-align: left;
+}
+
+.md-auth-form .md-form-field {
+  gap: 0.4rem;
+}
+
+.md-input-with-trailing {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.md-input-with-trailing .md-input {
+  flex: 1;
+  height: 44px;
+}
+
+.md-input-with-trailing .md-btn-action {
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+}
+
+.md-auth-form select.md-input {
+  height: 44px;
+  cursor: pointer;
+}
+
+.md-auth-submit {
+  width: 100%;
+  height: 46px;
+  justify-content: center;
+  margin-top: 0.15rem;
+}
+
+.md-auth-back {
+  margin-top: 0.35rem;
+}
+
+.md-auth-note {
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: var(--md-sys-color-on-surface-variant);
+  opacity: 0.85;
+  border-top: 1px solid var(--md-sys-color-outline-variant);
+  padding-top: 0.85rem;
+  margin-top: 0.35rem;
+}
+
+/* Read-only queue prompt */
+.md-readonly-list .md-builder-row {
+  grid-template-columns: 30px 1fr auto;
+}
+
+.md-signin-prompt {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 1rem;
+  border-radius: var(--md-shape-md);
+  border: 1px dashed var(--md-sys-color-outline-strong);
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-primary);
+  font-weight: 600;
+  font-size: 0.92rem;
+  transition: all var(--md-transition);
+}
+
+.md-signin-prompt:hover {
+  background: var(--md-sys-color-primary-container-hover);
+  border-style: solid;
+  box-shadow: var(--glow-primary);
+}
+
+/* ==========================================================================
+   Admin page
+   ========================================================================== */
+.md-admin-table {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.md-admin-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1.4fr 1.3fr auto auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--md-shape-sm);
+  background: var(--md-sys-color-surface-container);
+  border: 1px solid var(--md-sys-color-outline);
+}
+
+.md-admin-row.md-admin-hours {
+  grid-template-columns: 1.2fr 1.4fr 1fr 1.4fr auto;
+}
+
+.md-admin-head {
+  background: transparent;
+  border-color: transparent;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--md-sys-color-on-surface-variant);
+  padding-bottom: 0;
+}
+
+.md-admin-input {
+  height: 36px;
+  background: var(--md-sys-color-surface-container-low);
+}
+
+.md-admin-day {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.md-admin-mono {
+  font-family: var(--md-font-mono);
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+.md-admin-workid {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  height: 36px;
+  padding: 0 0.7rem;
+  border-radius: var(--md-shape-sm);
+  border: 1px dashed var(--md-sys-color-outline);
+  background: var(--md-sys-color-surface-container-low);
+  color: var(--md-sys-color-on-surface-variant);
+  font-family: var(--md-font-mono);
+  font-size: 0.8rem;
+  transition: all var(--md-transition);
+}
+
+.md-admin-workid:hover {
+  border-style: solid;
+  border-color: var(--md-sys-color-outline-strong);
+  color: var(--md-sys-color-primary);
+}
+
+.md-admin-workid-edit {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  position: relative;
+}
+
+.md-admin-error {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  font-size: 0.68rem;
+  color: var(--md-sys-color-error);
+  padding-top: 2px;
+  white-space: nowrap;
+}
+
+.md-admin-toggle {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--md-shape-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--md-sys-color-outline);
+  background: var(--md-sys-color-surface-container-low);
+  color: var(--md-sys-color-on-surface-variant);
+  transition: all var(--md-transition);
+}
+
+.md-admin-toggle.is-on {
+  background: var(--gradient-primary);
+  color: var(--md-sys-color-on-primary);
+  border-color: transparent;
+  box-shadow: var(--glow-primary);
+}
+
+.md-admin-toggle:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.md-danger-card {
+  border-color: var(--md-sys-color-error-border);
+}
+
+.md-danger-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.85rem;
+  padding: 0.9rem 0;
+  border-top: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.md-danger-row:first-of-type {
+  border-top: none;
+}
+
+.md-danger-text strong {
+  display: block;
+  font-size: 0.95rem;
+  color: var(--md-sys-color-on-surface);
+  margin-bottom: 0.15rem;
+}
+
+.md-danger-text p {
+  font-size: 0.82rem;
+  color: var(--md-sys-color-on-surface-variant);
+  max-width: 58ch;
+  line-height: 1.45;
+}
+
+.md-button-danger {
+  background: var(--md-sys-color-error);
+  color: var(--md-sys-color-surface);
+  font-weight: 700;
+}
+
+.md-button-danger:hover {
+  filter: brightness(1.1);
+  box-shadow: var(--md-elevation-2);
+}
+
+@media (max-width: 900px) {
+  .md-admin-row,
+  .md-admin-row.md-admin-hours {
+    grid-template-columns: 1fr 1fr;
+    row-gap: 0.5rem;
+  }
+
+  .md-admin-head {
+    display: none;
+  }
+
+  .md-session-name {
+    display: none;
+  }
+}
+
+/* ==========================================================================
    Entrance Motion
    Sections fade up in sequence on load. Deliberately scoped to the top-level
    panels only — animating list rows would restart on every drag reorder.

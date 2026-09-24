@@ -11,7 +11,9 @@ import {
   CheckCircle,
   ChevronLeft,
   ChevronRight,
-  CalendarDays
+  CalendarDays,
+  ListOrdered,
+  LogIn
 } from 'lucide-react'
 import { QueueBuilder } from '../components/QueueBuilder'
 import { formatDuration, formatTimeRemaining } from '../services/schedule'
@@ -24,6 +26,8 @@ import { formatDuration, formatTimeRemaining } from '../services/schedule'
  * which kept the page busy without being used often.
  */
 export const QueuePage = ({
+  canEdit,
+  onRequestSignIn,
   daysOfWeek,
   activeDay,
   selectedDayKey,
@@ -75,10 +79,12 @@ export const QueuePage = ({
               <span>{activeDay.hours}</span>
               {activeDay.isCustom && <span className="md-custom-badge">Custom</span>}
             </span>
-            <button className="md-button md-button-tonal" onClick={onEditHours}>
-              <Sliders size={15} />
-              <span>Edit hours</span>
-            </button>
+            {canEdit && (
+              <button className="md-button md-button-tonal" onClick={onEditHours}>
+                <Sliders size={15} />
+                <span>Edit hours</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -235,19 +241,75 @@ export const QueuePage = ({
         )}
       </section>
 
-      {/* ---- Builder ---------------------------------------------------- */}
-      <QueueBuilder
-        schedule={schedule}
-        availablePeople={availablePeople}
-        minutesPerPerson={minutesPerPerson}
-        isWorkDay={activeDay.isWorkDay}
-        onToggle={onToggle}
-        onMove={onMove}
-        onAddAll={onAddAll}
-        onClear={onClear}
-        onAddPerson={onAddPerson}
-        onRemovePerson={onRemovePerson}
-      />
+      {/* ---- Builder ------------------------------------------------------
+          Viewing is public; editing needs a work ID. The wall display can
+          therefore sit on this page unattended after a reboot. */}
+      {canEdit ? (
+        <QueueBuilder
+          schedule={schedule}
+          availablePeople={availablePeople}
+          minutesPerPerson={minutesPerPerson}
+          isWorkDay={activeDay.isWorkDay}
+          onToggle={onToggle}
+          onMove={onMove}
+          onAddAll={onAddAll}
+          onClear={onClear}
+          onAddPerson={onAddPerson}
+          onRemovePerson={onRemovePerson}
+        />
+      ) : (
+        <>
+          <section className="md-card md-readonly-list">
+            <div className="md-section-header">
+              <div className="md-section-title">
+                <ListOrdered size={19} />
+                <span>Queue</span>
+              </div>
+              <span className="md-pill-duration">
+                {schedule.length > 0 ? `${schedule.length} scheduled` : 'Empty'}
+              </span>
+            </div>
+
+            {schedule.length === 0 ? (
+              <div className="md-empty-dropzone">
+                <ListOrdered size={26} />
+                <strong>Nothing scheduled</strong>
+                <p>Sign in with your work ID to build the queue for this day.</p>
+              </div>
+            ) : (
+              <ul className="md-builder-list">
+                {schedule.map(person => (
+                  <li
+                    key={person.id}
+                    className={`md-builder-row is-queued ${person.status === 'serving' ? 'is-serving' : ''}`}
+                  >
+                    <span className="md-builder-pos">{person.position}</span>
+                    <span className="md-builder-name">
+                      {person.name}
+                      {person.status === 'serving' && (
+                        <span className="md-status-pill md-status-serving">
+                          <span className="md-pulse-dot" style={{ width: '6px', height: '6px' }} />
+                          On duty
+                        </span>
+                      )}
+                    </span>
+                    {activeDay.isWorkDay && (
+                      <span className="md-builder-time">
+                        {person.startTimeStr} – {person.endTimeStr}
+                      </span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          <button className="md-signin-prompt" onClick={onRequestSignIn}>
+            <LogIn size={17} />
+            <span>Sign in with your work ID to edit this queue</span>
+          </button>
+        </>
+      )}
     </div>
   )
 }
