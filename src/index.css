@@ -1,41 +1,42 @@
 /* ==========================================================================
-   Dispatch HQ — "Command Cyan" Design System
-   Material Design 3 token architecture tuned for a real-time operations
-   console: deep slate-navy surfaces, an electric cyan/teal accent, and
-   glass + glow treatments that stay legible on a wall-mounted display.
+   Dispatch HQ — "Iris" Design System
+   Material Design 3 token architecture drawn from the brand orb: an
+   iridescent blue -> indigo -> fuchsia sweep over deep indigo-black
+   surfaces, with glass + glow treatments that stay legible on a
+   wall-mounted display.
    ========================================================================== */
 
 :root {
   color-scheme: dark;
 
   /* ---- Brand / Primary -------------------------------------------------- */
-  --md-sys-color-primary: #22d3ee;
-  --md-sys-color-on-primary: #03161d;
-  --md-sys-color-primary-container: rgba(34, 211, 238, 0.13);
-  --md-sys-color-primary-container-hover: rgba(34, 211, 238, 0.24);
-  --md-sys-color-on-primary-container: #a5f3fc;
-  --md-sys-color-primary-hover: #67e8f9;
-  --md-sys-color-primary-dim: #0e7490;
+  --md-sys-color-primary: #818cf8;
+  --md-sys-color-on-primary: #0a0a14;
+  --md-sys-color-primary-container: rgba(129, 140, 248, 0.14);
+  --md-sys-color-primary-container-hover: rgba(129, 140, 248, 0.26);
+  --md-sys-color-on-primary-container: #c7d2fe;
+  --md-sys-color-primary-hover: #a5b4fc;
+  --md-sys-color-primary-dim: #4f46e5;
 
-  --md-sys-color-secondary: #2dd4bf;
-  --md-sys-color-on-secondary: #022c26;
-  --md-sys-color-secondary-container: rgba(45, 212, 191, 0.13);
+  --md-sys-color-secondary: #e879f9;
+  --md-sys-color-on-secondary: #1a0a1e;
+  --md-sys-color-secondary-container: rgba(232, 121, 249, 0.13);
 
-  /* ---- Surfaces (slate-navy ramp) --------------------------------------- */
-  --md-sys-color-surface: #070b11;
-  --md-sys-color-surface-dim: #04070b;
-  --md-sys-color-surface-container-lowest: #04070b;
-  --md-sys-color-surface-container-low: #0c121a;
-  --md-sys-color-surface-container: #111a24;
-  --md-sys-color-surface-container-high: #18232f;
-  --md-sys-color-surface-container-highest: #22303f;
+  /* ---- Surfaces (indigo-black ramp) ------------------------------------- */
+  --md-sys-color-surface: #0a0a14;
+  --md-sys-color-surface-dim: #06060e;
+  --md-sys-color-surface-container-lowest: #06060e;
+  --md-sys-color-surface-container-low: #101020;
+  --md-sys-color-surface-container: #18182c;
+  --md-sys-color-surface-container-high: #20203a;
+  --md-sys-color-surface-container-highest: #2b2b4a;
 
   /* ---- Content ---------------------------------------------------------- */
-  --md-sys-color-on-surface: #e9f1f8;
-  --md-sys-color-on-surface-variant: #8ea6bd;
-  --md-sys-color-outline: rgba(141, 178, 209, 0.18);
-  --md-sys-color-outline-strong: rgba(34, 211, 238, 0.42);
-  --md-sys-color-outline-variant: rgba(141, 178, 209, 0.09);
+  --md-sys-color-on-surface: #eceafd;
+  --md-sys-color-on-surface-variant: #a3a0c8;
+  --md-sys-color-outline: rgba(165, 180, 252, 0.18);
+  --md-sys-color-outline-strong: rgba(129, 140, 248, 0.45);
+  --md-sys-color-outline-variant: rgba(165, 180, 252, 0.09);
 
   /* ---- Semantic --------------------------------------------------------- */
   --md-sys-color-error: #fb7185;
@@ -49,42 +50,42 @@
   --md-sys-color-warning-border: rgba(251, 191, 36, 0.38);
 
   /* ---- Queue status roles ----------------------------------------------- */
-  --status-dispatch: #22d3ee;
-  --status-dispatch-bg: rgba(34, 211, 238, 0.13);
-  --status-dispatch-border: rgba(34, 211, 238, 0.42);
+  --status-dispatch: #818cf8;
+  --status-dispatch-bg: rgba(129, 140, 248, 0.14);
+  --status-dispatch-border: rgba(129, 140, 248, 0.45);
 
-  --status-queue: #2dd4bf;
-  --status-queue-bg: rgba(45, 212, 191, 0.12);
-  --status-queue-border: rgba(45, 212, 191, 0.32);
+  --status-queue: #c084fc;
+  --status-queue-bg: rgba(192, 132, 252, 0.12);
+  --status-queue-border: rgba(192, 132, 252, 0.32);
 
-  --status-completed: #64798f;
-  --status-completed-bg: rgba(100, 121, 143, 0.14);
-  --status-completed-border: rgba(100, 121, 143, 0.28);
+  --status-completed: #6f6f95;
+  --status-completed-bg: rgba(111, 111, 149, 0.16);
+  --status-completed-border: rgba(111, 111, 149, 0.3);
 
   /* ---- Veils painted ON TOP of a primary-filled surface ------------------ */
-  /* Dark theme: primary is bright cyan, so veils must be dark to read. */
-  --veil-on-primary: rgba(3, 22, 29, 0.18);
-  --veil-on-primary-strong: rgba(3, 22, 29, 0.34);
+  /* Dark theme: primary is a bright indigo, so veils must be dark to read. */
+  --veil-on-primary: rgba(10, 10, 20, 0.18);
+  --veil-on-primary-strong: rgba(10, 10, 20, 0.34);
 
-  /* ---- Gradients -------------------------------------------------------- */
-  --gradient-primary: linear-gradient(135deg, #22d3ee 0%, #2dd4bf 100%);
-  --gradient-primary-vivid: linear-gradient(135deg, #67e8f9 0%, #22d3ee 48%, #2dd4bf 100%);
-  --gradient-card: linear-gradient(158deg, rgba(34, 211, 238, 0.055) 0%, rgba(45, 212, 191, 0.018) 42%, transparent 72%);
-  --gradient-panel: linear-gradient(180deg, rgba(141, 178, 209, 0.045) 0%, transparent 60%);
-  --gradient-sheen: linear-gradient(115deg, transparent 18%, rgba(255, 255, 255, 0.09) 50%, transparent 82%);
-  --gradient-text: linear-gradient(120deg, #e9f1f8 0%, #a5f3fc 55%, #5eead4 100%);
+  /* ---- Gradients — the orb's blue -> indigo -> fuchsia sweep ------------- */
+  --gradient-primary: linear-gradient(135deg, #60a5fa 0%, #818cf8 46%, #e879f9 100%);
+  --gradient-primary-vivid: linear-gradient(135deg, #93c5fd 0%, #a5b4fc 46%, #f0abfc 100%);
+  --gradient-card: linear-gradient(158deg, rgba(129, 140, 248, 0.07) 0%, rgba(232, 121, 249, 0.025) 42%, transparent 72%);
+  --gradient-panel: linear-gradient(180deg, rgba(165, 180, 252, 0.05) 0%, transparent 60%);
+  --gradient-sheen: linear-gradient(115deg, transparent 18%, rgba(255, 255, 255, 0.1) 50%, transparent 82%);
+  --gradient-text: linear-gradient(120deg, #eceafd 0%, #a5b4fc 52%, #f0abfc 100%);
 
   /* ---- Glow & Glass ----------------------------------------------------- */
-  --glow-ring: rgba(34, 211, 238, 0.35);
-  --glow-primary: 0 0 0 1px rgba(34, 211, 238, 0.22), 0 8px 28px -8px rgba(34, 211, 238, 0.42);
-  --glow-primary-strong: 0 0 32px rgba(34, 211, 238, 0.42), 0 0 0 1px rgba(34, 211, 238, 0.45);
-  --glow-dot: 0 0 10px rgba(34, 211, 238, 0.85);
+  --glow-ring: rgba(129, 140, 248, 0.38);
+  --glow-primary: 0 0 0 1px rgba(129, 140, 248, 0.24), 0 8px 28px -8px rgba(129, 140, 248, 0.45);
+  --glow-primary-strong: 0 0 32px rgba(129, 140, 248, 0.45), 0 0 0 1px rgba(192, 132, 252, 0.45);
+  --glow-dot: 0 0 10px rgba(129, 140, 248, 0.9);
 
-  --glass-bg: rgba(10, 16, 23, 0.72);
-  --glass-bg-strong: rgba(8, 13, 19, 0.88);
-  --glass-border: rgba(141, 178, 209, 0.14);
+  --glass-bg: rgba(14, 14, 28, 0.72);
+  --glass-bg-strong: rgba(10, 10, 22, 0.88);
+  --glass-border: rgba(165, 180, 252, 0.14);
   --glass-blur: saturate(180%) blur(18px);
-  --scrim: rgba(2, 6, 11, 0.78);
+  --scrim: rgba(5, 5, 12, 0.78);
 
   /* ---- Typography ------------------------------------------------------- */
   --md-font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
@@ -107,9 +108,9 @@
   --md-shape-full: 9999px;
 
   /* ---- State layers ----------------------------------------------------- */
-  --md-state-hover: rgba(141, 178, 209, 0.08);
-  --md-state-focus: rgba(34, 211, 238, 0.16);
-  --md-state-pressed: rgba(34, 211, 238, 0.22);
+  --md-state-hover: rgba(165, 180, 252, 0.08);
+  --md-state-focus: rgba(129, 140, 248, 0.18);
+  --md-state-pressed: rgba(129, 140, 248, 0.24);
 
   /* ---- Motion ----------------------------------------------------------- */
   --md-motion-standard: cubic-bezier(0.2, 0, 0, 1);
@@ -120,10 +121,10 @@
 
   /* ---- Ambient page backdrop -------------------------------------------- */
   --backdrop-glow:
-    radial-gradient(900px 520px at 16% -8%, rgba(34, 211, 238, 0.10), transparent 62%),
-    radial-gradient(760px 480px at 88% 4%, rgba(45, 212, 191, 0.075), transparent 60%),
-    radial-gradient(1100px 700px at 50% 108%, rgba(34, 211, 238, 0.05), transparent 66%);
-  --backdrop-grid-line: rgba(141, 178, 209, 0.035);
+    radial-gradient(900px 520px at 16% -8%, rgba(96, 165, 250, 0.12), transparent 62%),
+    radial-gradient(760px 480px at 88% 4%, rgba(232, 121, 249, 0.10), transparent 60%),
+    radial-gradient(1100px 700px at 50% 108%, rgba(129, 140, 248, 0.07), transparent 66%);
+  --backdrop-grid-line: rgba(165, 180, 252, 0.035);
 }
 
 /* ==========================================================================
@@ -132,33 +133,33 @@
 [data-theme="light"] {
   color-scheme: light;
 
-  /* Accents sit at cyan-700/teal-700 so small text on white clears WCAG AA
-     (4.5:1) — cyan-600 measured only 3.5:1 and failed. */
-  --md-sys-color-primary: #0e7490;
+  /* Accents sit at indigo-600/fuchsia-700 so small text on white clears
+     WCAG AA (4.5:1) — indigo-500 measured 4.47:1 and just missed. */
+  --md-sys-color-primary: #4f46e5;
   --md-sys-color-on-primary: #ffffff;
-  --md-sys-color-primary-container: #dcf6fb;
-  --md-sys-color-primary-container-hover: #c2eef7;
-  --md-sys-color-on-primary-container: #064e5b;
-  --md-sys-color-primary-hover: #155e75;
-  --md-sys-color-primary-dim: #0891b2;
+  --md-sys-color-primary-container: #e5e3fd;
+  --md-sys-color-primary-container-hover: #d4d0fb;
+  --md-sys-color-on-primary-container: #2e2a7a;
+  --md-sys-color-primary-hover: #4338ca;
+  --md-sys-color-primary-dim: #818cf8;
 
-  --md-sys-color-secondary: #0f766e;
+  --md-sys-color-secondary: #a21caf;
   --md-sys-color-on-secondary: #ffffff;
-  --md-sys-color-secondary-container: rgba(15, 118, 110, 0.12);
+  --md-sys-color-secondary-container: rgba(162, 28, 175, 0.11);
 
-  --md-sys-color-surface: #f4f8fb;
-  --md-sys-color-surface-dim: #e9eff5;
+  --md-sys-color-surface: #f8f8fe;
+  --md-sys-color-surface-dim: #eeeef8;
   --md-sys-color-surface-container-lowest: #ffffff;
   --md-sys-color-surface-container-low: #ffffff;
-  --md-sys-color-surface-container: #f1f6fa;
-  --md-sys-color-surface-container-high: #e5edf4;
-  --md-sys-color-surface-container-highest: #d6e2ec;
+  --md-sys-color-surface-container: #f3f3fb;
+  --md-sys-color-surface-container-high: #e9e9f6;
+  --md-sys-color-surface-container-highest: #dcdcef;
 
-  --md-sys-color-on-surface: #0d1b26;
-  --md-sys-color-on-surface-variant: #52708a;
-  --md-sys-color-outline: rgba(13, 45, 70, 0.14);
-  --md-sys-color-outline-strong: rgba(14, 116, 144, 0.5);
-  --md-sys-color-outline-variant: rgba(13, 45, 70, 0.07);
+  --md-sys-color-on-surface: #16162e;
+  --md-sys-color-on-surface-variant: #5b5b80;
+  --md-sys-color-outline: rgba(30, 27, 75, 0.14);
+  --md-sys-color-outline-strong: rgba(79, 70, 229, 0.5);
+  --md-sys-color-outline-variant: rgba(30, 27, 75, 0.07);
 
   --md-sys-color-error: #b91c1c;
   --md-sys-color-error-container: rgba(185, 28, 28, 0.09);
@@ -170,54 +171,54 @@
   --md-sys-color-warning-container: rgba(180, 83, 9, 0.09);
   --md-sys-color-warning-border: rgba(180, 83, 9, 0.3);
 
-  --status-dispatch: #0e7490;
-  --status-dispatch-bg: rgba(14, 116, 144, 0.1);
-  --status-dispatch-border: rgba(14, 116, 144, 0.38);
+  --status-dispatch: #4f46e5;
+  --status-dispatch-bg: rgba(79, 70, 229, 0.1);
+  --status-dispatch-border: rgba(79, 70, 229, 0.38);
 
-  --status-queue: #0f766e;
-  --status-queue-bg: rgba(15, 118, 110, 0.1);
-  --status-queue-border: rgba(15, 118, 110, 0.3);
+  --status-queue: #7c3aed;
+  --status-queue-bg: rgba(124, 58, 237, 0.1);
+  --status-queue-border: rgba(124, 58, 237, 0.3);
 
   --status-completed: #64748b;
   --status-completed-bg: rgba(100, 116, 139, 0.1);
   --status-completed-border: rgba(100, 116, 139, 0.26);
 
-  /* Light theme: primary is deep cyan with white text, so veils go light. */
+  /* Light theme: primary is deep indigo with white text, so veils go light. */
   --veil-on-primary: rgba(255, 255, 255, 0.2);
   --veil-on-primary-strong: rgba(255, 255, 255, 0.4);
 
   /* Every stop stays dark enough for white text to clear AA on top of it. */
-  --gradient-primary: linear-gradient(135deg, #0e7490 0%, #0f766e 100%);
-  --gradient-primary-vivid: linear-gradient(135deg, #0d7d99 0%, #0e7490 48%, #0f766e 100%);
-  --gradient-card: linear-gradient(158deg, rgba(14, 116, 144, 0.05) 0%, rgba(15, 118, 110, 0.02) 42%, transparent 72%);
-  --gradient-panel: linear-gradient(180deg, rgba(13, 45, 70, 0.03) 0%, transparent 60%);
+  --gradient-primary: linear-gradient(135deg, #4f46e5 0%, #7c3aed 48%, #a21caf 100%);
+  --gradient-primary-vivid: linear-gradient(135deg, #4f46e5 0%, #9333ea 48%, #c026d3 100%);
+  --gradient-card: linear-gradient(158deg, rgba(79, 70, 229, 0.05) 0%, rgba(162, 28, 175, 0.022) 42%, transparent 72%);
+  --gradient-panel: linear-gradient(180deg, rgba(30, 27, 75, 0.03) 0%, transparent 60%);
   --gradient-sheen: linear-gradient(115deg, transparent 18%, rgba(255, 255, 255, 0.35) 50%, transparent 82%);
-  --gradient-text: linear-gradient(120deg, #0d1b26 0%, #0e7490 60%, #0f766e 100%);
+  --gradient-text: linear-gradient(120deg, #16162e 0%, #4f46e5 58%, #a21caf 100%);
 
-  --glow-ring: rgba(14, 116, 144, 0.3);
-  --glow-primary: 0 0 0 1px rgba(14, 116, 144, 0.18), 0 8px 24px -8px rgba(14, 116, 144, 0.35);
-  --glow-primary-strong: 0 0 26px rgba(14, 116, 144, 0.3), 0 0 0 1px rgba(14, 116, 144, 0.35);
-  --glow-dot: 0 0 8px rgba(14, 116, 144, 0.7);
+  --glow-ring: rgba(79, 70, 229, 0.3);
+  --glow-primary: 0 0 0 1px rgba(79, 70, 229, 0.18), 0 8px 24px -8px rgba(79, 70, 229, 0.38);
+  --glow-primary-strong: 0 0 26px rgba(79, 70, 229, 0.32), 0 0 0 1px rgba(162, 28, 175, 0.35);
+  --glow-dot: 0 0 8px rgba(79, 70, 229, 0.7);
 
   --glass-bg: rgba(255, 255, 255, 0.78);
   --glass-bg-strong: rgba(255, 255, 255, 0.92);
-  --glass-border: rgba(13, 45, 70, 0.1);
-  --scrim: rgba(9, 28, 44, 0.42);
+  --glass-border: rgba(30, 27, 75, 0.1);
+  --scrim: rgba(18, 16, 48, 0.44);
 
-  --md-elevation-1: 0 1px 2px rgba(13, 45, 70, 0.06), 0 2px 8px -2px rgba(13, 45, 70, 0.08);
-  --md-elevation-2: 0 2px 4px rgba(13, 45, 70, 0.07), 0 8px 20px -6px rgba(13, 45, 70, 0.12);
-  --md-elevation-3: 0 4px 8px rgba(13, 45, 70, 0.07), 0 16px 34px -10px rgba(13, 45, 70, 0.16);
-  --md-elevation-4: 0 8px 16px rgba(13, 45, 70, 0.08), 0 28px 54px -14px rgba(13, 45, 70, 0.2);
+  --md-elevation-1: 0 1px 2px rgba(30, 27, 75, 0.06), 0 2px 8px -2px rgba(30, 27, 75, 0.08);
+  --md-elevation-2: 0 2px 4px rgba(30, 27, 75, 0.07), 0 8px 20px -6px rgba(30, 27, 75, 0.12);
+  --md-elevation-3: 0 4px 8px rgba(30, 27, 75, 0.07), 0 16px 34px -10px rgba(30, 27, 75, 0.16);
+  --md-elevation-4: 0 8px 16px rgba(30, 27, 75, 0.08), 0 28px 54px -14px rgba(30, 27, 75, 0.2);
 
-  --md-state-hover: rgba(13, 45, 70, 0.05);
-  --md-state-focus: rgba(14, 116, 144, 0.14);
-  --md-state-pressed: rgba(14, 116, 144, 0.2);
+  --md-state-hover: rgba(30, 27, 75, 0.05);
+  --md-state-focus: rgba(79, 70, 229, 0.14);
+  --md-state-pressed: rgba(79, 70, 229, 0.2);
 
   --backdrop-glow:
-    radial-gradient(900px 520px at 16% -8%, rgba(14, 116, 144, 0.10), transparent 62%),
-    radial-gradient(760px 480px at 88% 4%, rgba(15, 118, 110, 0.075), transparent 60%),
-    radial-gradient(1100px 700px at 50% 108%, rgba(14, 116, 144, 0.05), transparent 66%);
-  --backdrop-grid-line: rgba(13, 45, 70, 0.035);
+    radial-gradient(900px 520px at 16% -8%, rgba(79, 70, 229, 0.11), transparent 62%),
+    radial-gradient(760px 480px at 88% 4%, rgba(192, 38, 211, 0.085), transparent 60%),
+    radial-gradient(1100px 700px at 50% 108%, rgba(124, 58, 237, 0.055), transparent 66%);
+  --backdrop-grid-line: rgba(30, 27, 75, 0.035);
 }
 
 /* ==========================================================================
@@ -348,9 +349,10 @@ a {
   border-radius: var(--md-shape-xs);
 }
 
-/* Native time pickers render a dark glyph that vanishes on dark surfaces */
+/* Native time pickers render a dark glyph that vanishes on dark surfaces.
+   invert(1) guarantees a light glyph; the rest just tints it toward indigo. */
 input[type="time"]::-webkit-calendar-picker-indicator {
-  filter: invert(72%) sepia(52%) saturate(2200%) hue-rotate(140deg) brightness(95%);
+  filter: invert(1) sepia(22%) saturate(420%) hue-rotate(200deg) brightness(1.05);
   cursor: pointer;
 }
 

@@ -94,14 +94,14 @@ const SHIFT_PRESETS = [
   { label: '12:00 – 20:00 (Evening Shift)', start: '12:00', end: '20:00' }
 ]
 
-// Master team roster with Command Cyan accent tones
+// Master team roster with Iris accent tones
 const INITIAL_ROSTER = [
-  { id: '1', name: 'Komer', role: 'Dispatch Specialist', color: '#22d3ee' },
-  { id: '2', name: 'Alen', role: 'Dispatch Specialist', color: '#2dd4bf' },
-  { id: '3', name: 'Dani', role: 'Dispatch Specialist', color: '#38bdf8' },
-  { id: '4', name: 'Yair', role: 'Dispatch Specialist', color: '#0ea5e9' },
-  { id: '5', name: 'Chen', role: 'Dispatch Specialist', color: '#5eead4' },
-  { id: '6', name: 'Dolev', role: 'Dispatch Specialist', color: '#06b6d4' }
+  { id: '1', name: 'Komer', role: 'Dispatch Specialist', color: '#818cf8' },
+  { id: '2', name: 'Alen', role: 'Dispatch Specialist', color: '#a78bfa' },
+  { id: '3', name: 'Dani', role: 'Dispatch Specialist', color: '#60a5fa' },
+  { id: '4', name: 'Yair', role: 'Dispatch Specialist', color: '#c084fc' },
+  { id: '5', name: 'Chen', role: 'Dispatch Specialist', color: '#e879f9' },
+  { id: '6', name: 'Dolev', role: 'Dispatch Specialist', color: '#6366f1' }
 ]
 
 // Default day assignments (Sunday - Thursday work days with all 6 workers; Friday & Saturday off)
@@ -661,7 +661,7 @@ function App() {
     e.preventDefault()
     if (!newRosterName.trim()) return
 
-    const colors = ['#22d3ee', '#2dd4bf', '#38bdf8', '#0ea5e9', '#5eead4', '#06b6d4', '#67e8f9']
+    const colors = ['#818cf8', '#a78bfa', '#60a5fa', '#c084fc', '#e879f9', '#6366f1', '#f0abfc']
     const newColor = colors[roster.length % colors.length]
 
     const newPerson = {

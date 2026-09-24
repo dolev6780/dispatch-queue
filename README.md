@@ -1,6 +1,6 @@
 # Dispatch Queue HQ 🚨
 
-A real-time dispatch queue and officer shift management application built with **React**, **Vite**, and **Material Design 3** aesthetics, themed as **"Command Cyan"** — deep slate-navy surfaces with an electric cyan/teal accent, styled to read like a live operations console.
+A real-time dispatch queue and officer shift management application built with **React**, **Vite**, and **Material Design 3** aesthetics, themed as **"Iris"** — the brand orb's iridescent blue → indigo → fuchsia sweep over deep indigo-black surfaces, styled to read like a live operations console.
 
 ## Design System
 
@@ -8,13 +8,15 @@ The entire UI is driven by CSS custom properties in [`src/index.css`](./src/inde
 
 | Role | Dark | Light |
 | --- | --- | --- |
-| Surface | `#070b11` | `#f4f8fb` |
-| Card / container | `#111a24` | `#f1f6fa` |
-| Accent (primary) | `#22d3ee` | `#0e7490` |
-| Accent (secondary) | `#2dd4bf` | `#0f766e` |
-| Body text | `#e9f1f8` | `#0d1b26` |
+| Surface | `#0a0a14` | `#f8f8fe` |
+| Card / container | `#18182c` | `#f3f3fb` |
+| Accent (primary) | `#818cf8` | `#4f46e5` |
+| Accent (secondary) | `#e879f9` | `#a21caf` |
+| Body text | `#eceafd` | `#16162e` |
 
-Both themes are verified against **WCAG AA** (4.5:1 for body text, 3:1 for non-text indicators) — including text on the gradient-filled active row. The light accents sit at cyan-700/teal-700 rather than the more vivid cyan-600, which measured only 3.5:1 on white and failed.
+The signature gradient runs the orb's full sweep — `#60a5fa → #818cf8 → #e879f9` in dark, `#4f46e5 → #7c3aed → #a21caf` in light — and carries the brand mark, filled buttons, the active-officer row and the progress bar.
+
+Both themes are verified against **WCAG AA** (4.5:1 for body text, 3:1 for non-text indicators), including text sitting on *every stop* of the gradient-filled active row. The light accents sit at indigo-600/fuchsia-700 rather than the more vivid indigo-500, which measured 4.47:1 on white and just missed.
 
 Beyond color, the theme layer adds glassmorphic surfaces, gradient accents with soft glows, an ambient aurora + grid backdrop, a shimmering progress bar, a breathing glow on the on-duty officer, staggered section entrance motion, tabular-figure alignment on all clock readouts, a consistent keyboard focus ring, and full `prefers-reduced-motion` and print support.
 
