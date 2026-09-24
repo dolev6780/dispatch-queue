@@ -41,7 +41,12 @@ service cloud.firestore {
     match /dispatch_queue/shared_state {
       allow read: if true;
 
-      allow write: if isSaneDispatchState(request.resource.data);
+      // Split out from a bare `allow write`: on a delete request.resource is
+      // null, so a single validated write rule blocks deletes outright and
+      // the document can never be cleared. Delete adds no real exposure here
+      // because the same callers can already overwrite the document.
+      allow create, update: if isSaneDispatchState(request.resource.data);
+      allow delete: if true;
     }
 
     // Everything else is denied.
