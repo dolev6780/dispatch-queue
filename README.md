@@ -119,8 +119,11 @@ Each command prompts for the value, so nothing lands in your shell history. Or a
 Deploy [`firestore.rules`](./firestore.rules) rather than the wide-open `allow read, write: if true`:
 
 ```bash
-firebase deploy --only firestore:rules
+npm run rules:check   # compile the rules without releasing them
+npm run rules         # release them
 ```
+
+[`.firebaserc`](./.firebaserc) pins the default project, so neither command needs `--project`. `firebase-tools` is intentionally **not** a devDependency — CI runs `npm ci` on every deploy and it is a heavy package for something used occasionally, so the scripts resolve it through `npx` instead.
 
 > ⚠️ **The Firebase web config is public by design** — it ships inside the JS bundle, so anyone who opens the deployed site can read it. The supplied rules seal off every path except the single `dispatch_queue/shared_state` document and shape-check the payload, which stops your project being used as free storage. They **cannot** stop an anonymous visitor editing the roster, because the app has no sign-in. If the queue is sensitive, enable **Anonymous Auth + App Check** and require `request.auth != null` in the rules.
 

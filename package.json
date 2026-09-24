@@ -8,7 +8,9 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "node src/services/dailyReset.test.mjs && node src/services/schedule.test.mjs"
+    "test": "node src/services/dailyReset.test.mjs && node src/services/schedule.test.mjs",
+    "rules": "firebase deploy --only firestore:rules",
+    "rules:check": "firebase deploy --only firestore:rules --dry-run"
   },
   "dependencies": {
     "firebase": "^12.19.0",
