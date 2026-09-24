@@ -1,114 +1,228 @@
 /* ==========================================================================
-   nblabl12 — Material UI (Material Design 3) Design System
+   Dispatch HQ — "Command Cyan" Design System
+   Material Design 3 token architecture tuned for a real-time operations
+   console: deep slate-navy surfaces, an electric cyan/teal accent, and
+   glass + glow treatments that stay legible on a wall-mounted display.
    ========================================================================== */
 
 :root {
-  /* Material 3 Color Roles - Ultra High-Contrast Black & White Monochrome */
-  --md-sys-color-primary: #ffffff;
-  --md-sys-color-on-primary: #000000;
-  --md-sys-color-primary-container: rgba(255, 255, 255, 0.14);
-  --md-sys-color-on-primary-container: #ffffff;
-  --md-sys-color-primary-hover: #e5e5e5;
+  color-scheme: dark;
 
-  --md-sys-color-surface: #050505;
-  --md-sys-color-surface-dim: #000000;
-  --md-sys-color-surface-container-lowest: #000000;
-  --md-sys-color-surface-container-low: #0f0f0f;
-  --md-sys-color-surface-container: #171717;
-  --md-sys-color-surface-container-high: #222222;
-  --md-sys-color-surface-container-highest: #2e2e2e;
+  /* ---- Brand / Primary -------------------------------------------------- */
+  --md-sys-color-primary: #22d3ee;
+  --md-sys-color-on-primary: #03161d;
+  --md-sys-color-primary-container: rgba(34, 211, 238, 0.13);
+  --md-sys-color-primary-container-hover: rgba(34, 211, 238, 0.24);
+  --md-sys-color-on-primary-container: #a5f3fc;
+  --md-sys-color-primary-hover: #67e8f9;
+  --md-sys-color-primary-dim: #0e7490;
 
-  --md-sys-color-on-surface: #ffffff;
-  --md-sys-color-on-surface-variant: #a3a3a3;
-  --md-sys-color-outline: rgba(255, 255, 255, 0.2);
-  --md-sys-color-outline-variant: rgba(255, 255, 255, 0.09);
+  --md-sys-color-secondary: #2dd4bf;
+  --md-sys-color-on-secondary: #022c26;
+  --md-sys-color-secondary-container: rgba(45, 212, 191, 0.13);
 
-  /* Status Colors - Pure Monochrome Contrast */
-  --status-dispatch: #ffffff;
-  --status-dispatch-bg: rgba(255, 255, 255, 0.14);
-  --status-dispatch-border: rgba(255, 255, 255, 0.4);
+  /* ---- Surfaces (slate-navy ramp) --------------------------------------- */
+  --md-sys-color-surface: #070b11;
+  --md-sys-color-surface-dim: #04070b;
+  --md-sys-color-surface-container-lowest: #04070b;
+  --md-sys-color-surface-container-low: #0c121a;
+  --md-sys-color-surface-container: #111a24;
+  --md-sys-color-surface-container-high: #18232f;
+  --md-sys-color-surface-container-highest: #22303f;
 
-  --status-queue: #d4d4d4;
-  --status-queue-bg: rgba(212, 212, 212, 0.12);
-  --status-queue-border: rgba(212, 212, 212, 0.3);
+  /* ---- Content ---------------------------------------------------------- */
+  --md-sys-color-on-surface: #e9f1f8;
+  --md-sys-color-on-surface-variant: #8ea6bd;
+  --md-sys-color-outline: rgba(141, 178, 209, 0.18);
+  --md-sys-color-outline-strong: rgba(34, 211, 238, 0.42);
+  --md-sys-color-outline-variant: rgba(141, 178, 209, 0.09);
 
-  --status-completed: #737373;
-  --status-completed-bg: rgba(115, 115, 115, 0.14);
-  --status-completed-border: rgba(115, 115, 115, 0.28);
+  /* ---- Semantic --------------------------------------------------------- */
+  --md-sys-color-error: #fb7185;
+  --md-sys-color-error-container: rgba(251, 113, 133, 0.14);
+  --md-sys-color-error-border: rgba(251, 113, 133, 0.35);
+  --md-sys-color-success: #34d399;
+  --md-sys-color-success-container: rgba(52, 211, 153, 0.1);
+  --md-sys-color-success-border: rgba(52, 211, 153, 0.38);
+  --md-sys-color-warning: #fbbf24;
+  --md-sys-color-warning-container: rgba(251, 191, 36, 0.1);
+  --md-sys-color-warning-border: rgba(251, 191, 36, 0.38);
 
-  /* Material Typography Scale */
-  --md-font-family: 'Roboto', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --md-font-display: 'Outfit', 'Roboto', sans-serif;
-  --md-font-mono: 'JetBrains Mono', monospace;
+  /* ---- Queue status roles ----------------------------------------------- */
+  --status-dispatch: #22d3ee;
+  --status-dispatch-bg: rgba(34, 211, 238, 0.13);
+  --status-dispatch-border: rgba(34, 211, 238, 0.42);
 
-  /* Material Elevation Levels */
+  --status-queue: #2dd4bf;
+  --status-queue-bg: rgba(45, 212, 191, 0.12);
+  --status-queue-border: rgba(45, 212, 191, 0.32);
+
+  --status-completed: #64798f;
+  --status-completed-bg: rgba(100, 121, 143, 0.14);
+  --status-completed-border: rgba(100, 121, 143, 0.28);
+
+  /* ---- Veils painted ON TOP of a primary-filled surface ------------------ */
+  /* Dark theme: primary is bright cyan, so veils must be dark to read. */
+  --veil-on-primary: rgba(3, 22, 29, 0.18);
+  --veil-on-primary-strong: rgba(3, 22, 29, 0.34);
+
+  /* ---- Gradients -------------------------------------------------------- */
+  --gradient-primary: linear-gradient(135deg, #22d3ee 0%, #2dd4bf 100%);
+  --gradient-primary-vivid: linear-gradient(135deg, #67e8f9 0%, #22d3ee 48%, #2dd4bf 100%);
+  --gradient-card: linear-gradient(158deg, rgba(34, 211, 238, 0.055) 0%, rgba(45, 212, 191, 0.018) 42%, transparent 72%);
+  --gradient-panel: linear-gradient(180deg, rgba(141, 178, 209, 0.045) 0%, transparent 60%);
+  --gradient-sheen: linear-gradient(115deg, transparent 18%, rgba(255, 255, 255, 0.09) 50%, transparent 82%);
+  --gradient-text: linear-gradient(120deg, #e9f1f8 0%, #a5f3fc 55%, #5eead4 100%);
+
+  /* ---- Glow & Glass ----------------------------------------------------- */
+  --glow-ring: rgba(34, 211, 238, 0.35);
+  --glow-primary: 0 0 0 1px rgba(34, 211, 238, 0.22), 0 8px 28px -8px rgba(34, 211, 238, 0.42);
+  --glow-primary-strong: 0 0 32px rgba(34, 211, 238, 0.42), 0 0 0 1px rgba(34, 211, 238, 0.45);
+  --glow-dot: 0 0 10px rgba(34, 211, 238, 0.85);
+
+  --glass-bg: rgba(10, 16, 23, 0.72);
+  --glass-bg-strong: rgba(8, 13, 19, 0.88);
+  --glass-border: rgba(141, 178, 209, 0.14);
+  --glass-blur: saturate(180%) blur(18px);
+  --scrim: rgba(2, 6, 11, 0.78);
+
+  /* ---- Typography ------------------------------------------------------- */
+  --md-font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+  --md-font-display: 'Outfit', 'Inter', sans-serif;
+  --md-font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  /* ---- Elevation -------------------------------------------------------- */
   --md-elevation-0: none;
-  --md-elevation-1: 0 1px 3px 1px rgba(0, 0, 0, 0.4), 0 1px 2px 0 rgba(0, 0, 0, 0.5);
-  --md-elevation-2: 0 2px 6px 2px rgba(0, 0, 0, 0.4), 0 1px 2px 0 rgba(0, 0, 0, 0.5);
-  --md-elevation-3: 0 4px 8px 3px rgba(0, 0, 0, 0.4), 0 1px 3px 0 rgba(0, 0, 0, 0.5);
-  --md-elevation-4: 0 6px 10px 4px rgba(0, 0, 0, 0.4), 0 2px 3px 0 rgba(0, 0, 0, 0.5);
+  --md-elevation-1: 0 1px 2px rgba(0, 0, 0, 0.45), 0 2px 10px -3px rgba(0, 0, 0, 0.5);
+  --md-elevation-2: 0 2px 4px rgba(0, 0, 0, 0.42), 0 10px 24px -8px rgba(0, 0, 0, 0.58);
+  --md-elevation-3: 0 4px 8px rgba(0, 0, 0, 0.4), 0 18px 40px -12px rgba(0, 0, 0, 0.62);
+  --md-elevation-4: 0 8px 16px rgba(0, 0, 0, 0.4), 0 30px 60px -16px rgba(0, 0, 0, 0.68);
 
-  /* Material Shape Corner Radii */
-  --md-shape-xs: 4px;
-  --md-shape-sm: 8px;
-  --md-shape-md: 12px;
-  --md-shape-lg: 16px;
+  /* ---- Shape ------------------------------------------------------------ */
+  --md-shape-xs: 6px;
+  --md-shape-sm: 10px;
+  --md-shape-md: 14px;
+  --md-shape-lg: 20px;
   --md-shape-xl: 28px;
   --md-shape-full: 9999px;
 
-  /* State Layer Opacities */
-  --md-state-hover: rgba(255, 255, 255, 0.08);
-  --md-state-focus: rgba(255, 255, 255, 0.14);
-  --md-state-pressed: rgba(255, 255, 255, 0.18);
+  /* ---- State layers ----------------------------------------------------- */
+  --md-state-hover: rgba(141, 178, 209, 0.08);
+  --md-state-focus: rgba(34, 211, 238, 0.16);
+  --md-state-pressed: rgba(34, 211, 238, 0.22);
 
-  /* Motion Curves */
+  /* ---- Motion ----------------------------------------------------------- */
   --md-motion-standard: cubic-bezier(0.2, 0, 0, 1);
   --md-motion-emphasized: cubic-bezier(0.2, 0, 0.2, 1);
-  --md-transition: 0.2s var(--md-motion-standard);
+  --md-motion-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --md-transition: 0.22s var(--md-motion-standard);
+  --md-transition-slow: 0.4s var(--md-motion-emphasized);
+
+  /* ---- Ambient page backdrop -------------------------------------------- */
+  --backdrop-glow:
+    radial-gradient(900px 520px at 16% -8%, rgba(34, 211, 238, 0.10), transparent 62%),
+    radial-gradient(760px 480px at 88% 4%, rgba(45, 212, 191, 0.075), transparent 60%),
+    radial-gradient(1100px 700px at 50% 108%, rgba(34, 211, 238, 0.05), transparent 66%);
+  --backdrop-grid-line: rgba(141, 178, 209, 0.035);
 }
 
-/* Light Theme overrides (Clean Black & White Light Mode) */
+/* ==========================================================================
+   Light Theme — crisp daylight console
+   ========================================================================== */
 [data-theme="light"] {
-  --md-sys-color-primary: #000000;
+  color-scheme: light;
+
+  /* Accents sit at cyan-700/teal-700 so small text on white clears WCAG AA
+     (4.5:1) — cyan-600 measured only 3.5:1 and failed. */
+  --md-sys-color-primary: #0e7490;
   --md-sys-color-on-primary: #ffffff;
-  --md-sys-color-primary-container: #ebebeb;
-  --md-sys-color-on-primary-container: #000000;
-  --md-sys-color-primary-hover: #1f1f1f;
+  --md-sys-color-primary-container: #dcf6fb;
+  --md-sys-color-primary-container-hover: #c2eef7;
+  --md-sys-color-on-primary-container: #064e5b;
+  --md-sys-color-primary-hover: #155e75;
+  --md-sys-color-primary-dim: #0891b2;
 
-  --md-sys-color-surface: #ffffff;
-  --md-sys-color-surface-dim: #f8f8f8;
+  --md-sys-color-secondary: #0f766e;
+  --md-sys-color-on-secondary: #ffffff;
+  --md-sys-color-secondary-container: rgba(15, 118, 110, 0.12);
+
+  --md-sys-color-surface: #f4f8fb;
+  --md-sys-color-surface-dim: #e9eff5;
   --md-sys-color-surface-container-lowest: #ffffff;
-  --md-sys-color-surface-container-low: #f5f5f5;
-  --md-sys-color-surface-container: #efefef;
-  --md-sys-color-surface-container-high: #e2e2e2;
-  --md-sys-color-surface-container-highest: #d4d4d4;
+  --md-sys-color-surface-container-low: #ffffff;
+  --md-sys-color-surface-container: #f1f6fa;
+  --md-sys-color-surface-container-high: #e5edf4;
+  --md-sys-color-surface-container-highest: #d6e2ec;
 
-  --md-sys-color-on-surface: #000000;
-  --md-sys-color-on-surface-variant: #525252;
-  --md-sys-color-outline: rgba(0, 0, 0, 0.2);
-  --md-sys-color-outline-variant: rgba(0, 0, 0, 0.09);
+  --md-sys-color-on-surface: #0d1b26;
+  --md-sys-color-on-surface-variant: #52708a;
+  --md-sys-color-outline: rgba(13, 45, 70, 0.14);
+  --md-sys-color-outline-strong: rgba(14, 116, 144, 0.5);
+  --md-sys-color-outline-variant: rgba(13, 45, 70, 0.07);
 
-  --status-dispatch: #000000;
-  --status-dispatch-bg: rgba(0, 0, 0, 0.08);
-  --status-dispatch-border: rgba(0, 0, 0, 0.35);
+  --md-sys-color-error: #b91c1c;
+  --md-sys-color-error-container: rgba(185, 28, 28, 0.09);
+  --md-sys-color-error-border: rgba(185, 28, 28, 0.3);
+  --md-sys-color-success: #047857;
+  --md-sys-color-success-container: rgba(4, 120, 87, 0.09);
+  --md-sys-color-success-border: rgba(4, 120, 87, 0.3);
+  --md-sys-color-warning: #b45309;
+  --md-sys-color-warning-container: rgba(180, 83, 9, 0.09);
+  --md-sys-color-warning-border: rgba(180, 83, 9, 0.3);
 
-  --status-queue: #383838;
-  --status-queue-bg: rgba(56, 56, 56, 0.08);
-  --status-queue-border: rgba(56, 56, 56, 0.25);
+  --status-dispatch: #0e7490;
+  --status-dispatch-bg: rgba(14, 116, 144, 0.1);
+  --status-dispatch-border: rgba(14, 116, 144, 0.38);
 
-  --status-completed: #737373;
-  --status-completed-bg: rgba(115, 115, 115, 0.08);
-  --status-completed-border: rgba(115, 115, 115, 0.25);
+  --status-queue: #0f766e;
+  --status-queue-bg: rgba(15, 118, 110, 0.1);
+  --status-queue-border: rgba(15, 118, 110, 0.3);
 
-  --md-elevation-1: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
-  --md-elevation-2: 0 3px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
-  --md-elevation-3: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  --status-completed: #64748b;
+  --status-completed-bg: rgba(100, 116, 139, 0.1);
+  --status-completed-border: rgba(100, 116, 139, 0.26);
 
-  --md-state-hover: rgba(0, 0, 0, 0.05);
-  --md-state-focus: rgba(0, 0, 0, 0.09);
-  --md-state-pressed: rgba(0, 0, 0, 0.14);
+  /* Light theme: primary is deep cyan with white text, so veils go light. */
+  --veil-on-primary: rgba(255, 255, 255, 0.2);
+  --veil-on-primary-strong: rgba(255, 255, 255, 0.4);
+
+  /* Every stop stays dark enough for white text to clear AA on top of it. */
+  --gradient-primary: linear-gradient(135deg, #0e7490 0%, #0f766e 100%);
+  --gradient-primary-vivid: linear-gradient(135deg, #0d7d99 0%, #0e7490 48%, #0f766e 100%);
+  --gradient-card: linear-gradient(158deg, rgba(14, 116, 144, 0.05) 0%, rgba(15, 118, 110, 0.02) 42%, transparent 72%);
+  --gradient-panel: linear-gradient(180deg, rgba(13, 45, 70, 0.03) 0%, transparent 60%);
+  --gradient-sheen: linear-gradient(115deg, transparent 18%, rgba(255, 255, 255, 0.35) 50%, transparent 82%);
+  --gradient-text: linear-gradient(120deg, #0d1b26 0%, #0e7490 60%, #0f766e 100%);
+
+  --glow-ring: rgba(14, 116, 144, 0.3);
+  --glow-primary: 0 0 0 1px rgba(14, 116, 144, 0.18), 0 8px 24px -8px rgba(14, 116, 144, 0.35);
+  --glow-primary-strong: 0 0 26px rgba(14, 116, 144, 0.3), 0 0 0 1px rgba(14, 116, 144, 0.35);
+  --glow-dot: 0 0 8px rgba(14, 116, 144, 0.7);
+
+  --glass-bg: rgba(255, 255, 255, 0.78);
+  --glass-bg-strong: rgba(255, 255, 255, 0.92);
+  --glass-border: rgba(13, 45, 70, 0.1);
+  --scrim: rgba(9, 28, 44, 0.42);
+
+  --md-elevation-1: 0 1px 2px rgba(13, 45, 70, 0.06), 0 2px 8px -2px rgba(13, 45, 70, 0.08);
+  --md-elevation-2: 0 2px 4px rgba(13, 45, 70, 0.07), 0 8px 20px -6px rgba(13, 45, 70, 0.12);
+  --md-elevation-3: 0 4px 8px rgba(13, 45, 70, 0.07), 0 16px 34px -10px rgba(13, 45, 70, 0.16);
+  --md-elevation-4: 0 8px 16px rgba(13, 45, 70, 0.08), 0 28px 54px -14px rgba(13, 45, 70, 0.2);
+
+  --md-state-hover: rgba(13, 45, 70, 0.05);
+  --md-state-focus: rgba(14, 116, 144, 0.14);
+  --md-state-pressed: rgba(14, 116, 144, 0.2);
+
+  --backdrop-glow:
+    radial-gradient(900px 520px at 16% -8%, rgba(14, 116, 144, 0.10), transparent 62%),
+    radial-gradient(760px 480px at 88% 4%, rgba(15, 118, 110, 0.075), transparent 60%),
+    radial-gradient(1100px 700px at 50% 108%, rgba(14, 116, 144, 0.05), transparent 66%);
+  --backdrop-grid-line: rgba(13, 45, 70, 0.035);
 }
 
+/* ==========================================================================
+   Base
+   ========================================================================== */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -117,9 +231,10 @@
 
 html {
   scroll-behavior: smooth;
-  font-size: 18px; /* Increased from 16px for larger global typography scale */
+  font-size: 17px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 body {
@@ -129,35 +244,73 @@ body {
   font-family: var(--md-font-family);
   line-height: 1.5;
   overflow-x: hidden;
-  background-image: radial-gradient(circle 800px at 50% 0%, rgba(255, 255, 255, 0.02), transparent 70%);
+  transition: background-color var(--md-transition-slow), color var(--md-transition-slow);
 }
 
-/* Material Custom Scrollbar */
+/* Ambient aurora glow behind everything */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background-image: var(--backdrop-glow);
+}
+
+/* Faint operations grid, faded out toward the edges */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0.55;
+  background-image:
+    linear-gradient(var(--backdrop-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--backdrop-grid-line) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(circle 900px at 50% 12%, #000 0%, transparent 78%);
+  mask-image: radial-gradient(circle 900px at 50% 12%, #000 0%, transparent 78%);
+}
+
+/* ==========================================================================
+   Scrollbar
+   ========================================================================== */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--md-sys-color-surface);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: var(--md-sys-color-surface-container-high);
+  background: var(--md-sys-color-surface-container-highest);
+  border: 3px solid transparent;
+  background-clip: content-box;
   border-radius: var(--md-shape-full);
 }
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--md-sys-color-primary);
+  background-clip: content-box;
 }
 
-/* Typography Scale */
+* {
+  scrollbar-color: var(--md-sys-color-surface-container-highest) transparent;
+  scrollbar-width: thin;
+}
+
+/* ==========================================================================
+   Typography
+   ========================================================================== */
 h1, h2, h3, h4, h5, h6 {
   font-family: var(--md-font-display);
   font-weight: 700;
-  line-height: 1.25;
+  line-height: 1.22;
   color: var(--md-sys-color-on-surface);
-  letter-spacing: -0.015em;
+  letter-spacing: -0.02em;
 }
 
 code, pre {
@@ -170,6 +323,7 @@ button {
   background: none;
   font-family: inherit;
   font-size: inherit;
+  color: inherit;
 }
 
 input, select, textarea {
@@ -180,4 +334,38 @@ input, select, textarea {
 a {
   color: inherit;
   text-decoration: none;
+}
+
+::selection {
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+}
+
+/* Consistent keyboard focus ring across the whole app */
+:focus-visible {
+  outline: 2px solid var(--md-sys-color-primary);
+  outline-offset: 2px;
+  border-radius: var(--md-shape-xs);
+}
+
+/* Native time pickers render a dark glyph that vanishes on dark surfaces */
+input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: invert(72%) sepia(52%) saturate(2200%) hue-rotate(140deg) brightness(95%);
+  cursor: pointer;
+}
+
+[data-theme="light"] input[type="time"]::-webkit-calendar-picker-indicator {
+  filter: none;
+}
+
+/* ==========================================================================
+   Reduced motion
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
