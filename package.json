@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "test": "node src/services/dailyReset.test.mjs && node src/services/schedule.test.mjs && node src/services/auth.test.mjs",
     "rules": "firebase deploy --only firestore:rules",
-    "rules:check": "firebase deploy --only firestore:rules --dry-run"
+    "rules:check": "firebase deploy --only firestore:rules --dry-run",
+    "auth:check": "node scripts/check-auth.mjs"
   },
   "dependencies": {
     "firebase": "^12.19.0",

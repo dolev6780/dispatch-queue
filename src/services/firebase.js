@@ -1,4 +1,5 @@
 import { initializeApp, getApps, getApp } from 'firebase/app'
+import { getAuth, signInAnonymously } from 'firebase/auth'
 import {
   getFirestore,
   doc,
@@ -29,6 +30,7 @@ let connectionState = {
   status: 'unconfigured', // 'unconfigured' | 'connecting' | 'connected' | 'error'
   projectId: null,
   isConfigured: false,
+  isAuthenticated: false,
   lastSyncTime: null,
   error: null
 }
@@ -130,6 +132,46 @@ export const initFirebase = () => {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Anonymous authentication
+//
+// Every station signs in anonymously so Firestore rules can require
+// `request.auth != null`, which shuts out direct API traffic from anything
+// that is not this app (scripts, scanners, curl). It is invisible to users —
+// the work-ID gate is still what decides who may edit.
+//
+// It is deliberately FAIL-SOFT. If the Anonymous provider is not enabled in
+// the Firebase Console this resolves to null and the board keeps working,
+// because the deployed rules still allow unauthenticated writes. Only after
+// the provider is enabled should signedIn() in firestore.rules be tightened —
+// doing it the other way round takes the board down. See `npm run auth:check`.
+// ---------------------------------------------------------------------------
+let authReadyPromise = null
+
+const ensureAnonymousAuth = (app) => {
+  if (authReadyPromise) return authReadyPromise
+
+  authReadyPromise = (async () => {
+    try {
+      const auth = getAuth(app)
+      if (auth.currentUser) return auth.currentUser
+      const credential = await signInAnonymously(auth)
+      connectionState = { ...connectionState, isAuthenticated: true }
+      notifyStatusListeners()
+      return credential.user
+    } catch (err) {
+      // auth/operation-not-allowed or auth/configuration-not-found means the
+      // provider is not switched on yet. Not fatal while the rules are open.
+      console.warn('Anonymous sign-in unavailable:', err?.code || err)
+      connectionState = { ...connectionState, isAuthenticated: false }
+      notifyStatusListeners()
+      return null
+    }
+  })()
+
+  return authReadyPromise
+}
+
 /**
  * Read cached local state from localStorage with fallbacks
  */
@@ -206,8 +248,26 @@ export const subscribeToDispatchState = (onStateReceived, initialDefaults) => {
     return () => {}
   }
 
+  // Sign in before attaching the listener. Once the rules require auth, a
+  // listener attached first would be rejected before the token arrives.
+  // The caller still gets its unsubscribe function synchronously.
+  let cancelled = false
+  ensureAnonymousAuth(currentApp).then(() => {
+    if (cancelled) return
+    attachSnapshot()
+  })
+
+  const returnUnsubscribe = () => {
+    cancelled = true
+    if (activeUnsubscribe) {
+      activeUnsubscribe()
+      activeUnsubscribe = null
+    }
+  }
+
   const stateDocRef = doc(db, 'dispatch_queue', 'shared_state')
 
+  function attachSnapshot () {
   activeUnsubscribe = onSnapshot(
     stateDocRef,
     (snapshot) => {
@@ -287,13 +347,9 @@ export const subscribeToDispatchState = (onStateReceived, initialDefaults) => {
       })
     }
   )
-
-  return () => {
-    if (activeUnsubscribe) {
-      activeUnsubscribe()
-      activeUnsubscribe = null
-    }
   }
+
+  return returnUnsubscribe
 }
 
 let saveTimeout = null
@@ -315,6 +371,10 @@ export const saveDispatchState = (statePatch) => {
 
     saveTimeout = setTimeout(async () => {
       try {
+        // Wait for the anonymous session so the write carries a token once the
+        // rules require one. Resolves immediately (to null) while the provider
+        // is still switched off.
+        await ensureAnonymousAuth(currentApp)
         const stateDocRef = doc(currentDb, 'dispatch_queue', 'shared_state')
         await setDoc(
           stateDocRef,

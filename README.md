@@ -112,7 +112,20 @@ It is **not authentication**. There is no server-side check, so:
 - The administrator flag is enforced in the UI only.
 - Hashing stops ID harvesting, but a short numeric ID is guessable offline.
 
-If the board ever needs real protection, replace this with Firebase Auth (Google or email/password) and tighten [`firestore.rules`](./firestore.rules) to require `request.auth != null`. The rules file already carries a note on exactly where that line goes.
+### Hardening: shutting out direct API traffic
+
+The app **already signs in anonymously** on load (see [`src/services/firebase.js`](./src/services/firebase.js)), so the rules can be tightened to require a token. That shuts out curl, scanners and scripts — anything that is not this app. It does **not** stop someone who simply loads the page, so it complements the work-ID gate rather than replacing it.
+
+This is switched off by default because enabling it in the wrong order takes the board down for everyone. Do it in this order:
+
+1. **Firebase Console → Build → Authentication → Get started → Sign-in method → enable Anonymous.** This is the only step that cannot be done from this repository.
+2. `npm run auth:check` — must report **ENABLED**.
+3. In [`firestore.rules`](./firestore.rules), change `signedIn()` to `return request.auth != null;`.
+4. `npm run rules`.
+
+`auth:check` exists precisely so step 3 is never guessed at. If the rules demand a token the project cannot issue, every station silently loses the ability to write.
+
+For genuine per-user protection — not just per-app — this has to become real Firebase Auth (Google or email/password) with rules that check the signed-in identity, replacing work IDs entirely.
 
 ## Firebase Cloud Sync 🔥
 

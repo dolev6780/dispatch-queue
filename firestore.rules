@@ -39,20 +39,48 @@ service cloud.firestore {
     // Note: the client uses setDoc(..., { merge: true }), so
     // request.resource.data is the full document AFTER the merge.
     match /dispatch_queue/shared_state {
+      // Reads stay open: the wall display must render without signing in.
       allow read: if true;
 
       // Split out from a bare `allow write`: on a delete request.resource is
       // null, so a single validated write rule blocks deletes outright and
       // the document can never be cleared. Delete adds no real exposure here
       // because the same callers can already overwrite the document.
-      allow create, update: if isSaneDispatchState(request.resource.data);
-      allow delete: if true;
+      allow create, update: if signedIn() && isSaneDispatchState(request.resource.data);
+      allow delete: if signedIn();
     }
 
     // Everything else is denied.
     match /{document=**} {
       allow read, write: if false;
     }
+  }
+
+  // ===========================================================================
+  // THE HARDENING SWITCH
+  //
+  // Returning `true` leaves writes open to anonymous callers — the state the
+  // board shipped in, and the only safe setting until Firebase Auth is
+  // actually working.
+  //
+  // To harden, in order (the order matters — reversing it takes the board
+  // down for everyone):
+  //   1. Firebase Console -> Build -> Authentication -> Get started
+  //      -> Sign-in method -> enable "Anonymous".
+  //   2. Run `npm run auth:check`. It must report ENABLED.
+  //   3. Change the line below to:  return request.auth != null;
+  //   4. Run `npm run rules`.
+  //
+  // The app already signs in anonymously on load (see services/firebase.js),
+  // so no code change is needed — step 1 is the only thing that cannot be
+  // done from this repository.
+  //
+  // What this buys: direct API traffic (curl, scanners, scripts) is shut out.
+  // What it does not buy: anyone who loads the page still gets a token, so it
+  // is not a substitute for real per-user auth.
+  // ===========================================================================
+  function signedIn() {
+    return true;
   }
 
   // Lenient bounds check — rejects junk without being brittle about which
