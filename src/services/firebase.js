@@ -14,6 +14,10 @@ const CUSTOM_CONFIG_KEY = 'dispatch_custom_firebase_config'
 const LOCAL_ROSTER_KEY = 'dispatch_roster_v1'
 const LOCAL_DAY_QUEUES_KEY = 'dispatch_day_queues_v1'
 const LOCAL_DAY_SCHEDULES_KEY = 'dispatch_day_schedules_v1'
+// Calendar date ("YYYY-MM-DD") of the last automatic daily queue reset.
+// Shared so that whichever station is open first performs the reset and
+// every other station sees it as already done.
+const LOCAL_LAST_RESET_KEY = 'dispatch_last_reset_date_v1'
 
 let currentApp = null
 let currentDb = null
@@ -188,6 +192,7 @@ export const getLocalCachedState = (defaults) => {
   let roster = defaults?.roster || []
   let dayQueues = defaults?.dayQueues || {}
   let daySchedules = defaults?.daySchedules || {}
+  let lastResetDate = defaults?.lastResetDate || null
 
   try {
     const savedRoster = localStorage.getItem(LOCAL_ROSTER_KEY)
@@ -210,7 +215,14 @@ export const getLocalCachedState = (defaults) => {
     // Ignore parse error
   }
 
-  return { roster, dayQueues, daySchedules }
+  try {
+    const savedReset = localStorage.getItem(LOCAL_LAST_RESET_KEY)
+    if (savedReset) lastResetDate = savedReset
+  } catch {
+    // Ignore read error
+  }
+
+  return { roster, dayQueues, daySchedules, lastResetDate }
 }
 
 /**
@@ -221,6 +233,7 @@ export const saveLocalCachedState = (state) => {
     if (state.roster) localStorage.setItem(LOCAL_ROSTER_KEY, JSON.stringify(state.roster))
     if (state.dayQueues) localStorage.setItem(LOCAL_DAY_QUEUES_KEY, JSON.stringify(state.dayQueues))
     if (state.daySchedules) localStorage.setItem(LOCAL_DAY_SCHEDULES_KEY, JSON.stringify(state.daySchedules))
+    if (state.lastResetDate) localStorage.setItem(LOCAL_LAST_RESET_KEY, state.lastResetDate)
   } catch (err) {
     console.warn('Failed to save to local cache:', err)
   }
@@ -294,13 +307,15 @@ export const subscribeToDispatchState = (onStateReceived, initialDefaults) => {
         saveLocalCachedState({
           roster: data.roster,
           dayQueues: data.dayQueues,
-          daySchedules: data.daySchedules
+          daySchedules: data.daySchedules,
+          lastResetDate: data.lastResetDate
         })
 
         onStateReceived({
           roster: data.roster || initialDefaults.roster,
           dayQueues: data.dayQueues || initialDefaults.dayQueues,
           daySchedules: data.daySchedules || initialDefaults.daySchedules,
+          lastResetDate: data.lastResetDate || null,
           updatedBy: data.updatedBy,
           updatedAt: data.updatedAt,
           _isRemote: true,

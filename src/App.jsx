@@ -49,6 +49,7 @@ import {
   onConnectionStatusChange,
   getLocalCachedState
 } from './services/firebase'
+import { toDateKey, resolveDailyReset } from './services/dailyReset'
 
 
 
@@ -119,9 +120,14 @@ function App() {
   const [theme, setTheme] = useState('dark')
   const [currentTime, setCurrentTime] = useState(new Date())
 
-  // Real today day index (0 = Sunday, 1 = Monday, ..., 4 = Thursday)
-  const todayDayIndex = new Date().getDay()
-  const [selectedDayKey, setSelectedDayKey] = useState(todayDayIndex)
+  // Real today day index (0 = Sunday, 1 = Monday, ..., 6 = Saturday).
+  // Derived from the ticking clock, not a one-off new Date(), so a wall
+  // display left running overnight notices the day change.
+  const todayDayIndex = currentTime.getDay()
+  const todayDateKey = toDateKey(currentTime)
+
+  const [selectedDayKey, setSelectedDayKey] = useState(() => new Date().getDay())
+  const previousTodayRef = useRef(todayDayIndex)
 
   const cachedInitial = useMemo(() => getLocalCachedState({
     roster: INITIAL_ROSTER,
@@ -134,6 +140,13 @@ function App() {
   const [dayQueues, setDayQueues] = useState(cachedInitial.dayQueues)
   const [daySchedules, setDaySchedules] = useState(cachedInitial.daySchedules)
   const [newRosterName, setNewRosterName] = useState('')
+
+  // Calendar date of the last automatic daily reset, shared across stations.
+  const [lastResetDate, setLastResetDate] = useState(cachedInitial.lastResetDate)
+  // Becomes true once the first state (remote or cached) has arrived. The
+  // daily reset waits on this so a station opening mid-morning cannot clear
+  // a queue another station already built for today.
+  const [isStateLoaded, setIsStateLoaded] = useState(false)
 
   // Firebase Cloud Synchronization State
   const [connectionState, setConnectionState] = useState(getConnectionState)
@@ -150,11 +163,15 @@ function App() {
   useEffect(() => {
     const unsubscribe = subscribeToDispatchState(
       (remoteState) => {
+        // Mark loaded even for our own echo, so the daily reset is never
+        // left waiting on a snapshot that only ever comes back as self.
+        setIsStateLoaded(true)
         if (!remoteState._fromSelf) {
           isRemoteUpdateRef.current = true
           if (remoteState.roster) setRoster(remoteState.roster)
           if (remoteState.dayQueues) setDayQueues(remoteState.dayQueues)
           if (remoteState.daySchedules) setDaySchedules(remoteState.daySchedules)
+          if (remoteState.lastResetDate) setLastResetDate(remoteState.lastResetDate)
         }
       },
       {
@@ -179,9 +196,46 @@ function App() {
     saveDispatchState({
       roster,
       dayQueues,
-      daySchedules
+      daySchedules,
+      lastResetDate
     })
-  }, [roster, dayQueues, daySchedules])
+  }, [roster, dayQueues, daySchedules, lastResetDate])
+
+  // Follow the calendar day. If the viewer is looking at "today" when the
+  // date changes, move them to the new today; if they deliberately parked on
+  // another weekday, leave that selection alone.
+  useEffect(() => {
+    if (previousTodayRef.current === todayDayIndex) return
+    const previousToday = previousTodayRef.current
+    previousTodayRef.current = todayDayIndex
+    setSelectedDayKey(current => (current === previousToday ? todayDayIndex : current))
+  }, [todayDayIndex])
+
+  // Daily queue reset — empty today's queue once per calendar day.
+  // Emptying is idempotent, so if two stations are open when the date turns
+  // they both write the same result and the states converge.
+  //
+  // The set-state-in-effect rule is disabled deliberately here: this effect
+  // synchronises with two external systems (the wall clock crossing midnight
+  // and the shared Firestore document) and the reset has to be persisted, so
+  // it cannot be derived during render. The decision itself lives in
+  // services/dailyReset.js and is unit tested.
+  /* oxlint-disable react/set-state-in-effect */
+  useEffect(() => {
+    const { action, date } = resolveDailyReset({
+      isStateLoaded,
+      lastResetDate,
+      todayDateKey
+    })
+
+    if (action === 'wait' || action === 'none') return
+
+    if (action === 'reset') {
+      setDayQueues(current => ({ ...current, [todayDayIndex]: [] }))
+    }
+    setLastResetDate(date)
+  }, [isStateLoaded, lastResetDate, todayDateKey, todayDayIndex])
+  /* oxlint-enable react/set-state-in-effect */
 
   // Drag and Drop State
   const [draggedItem, setDraggedItem] = useState(null)
@@ -1526,6 +1580,23 @@ function App() {
                       : `Show ${earlierCompletedCount} Earlier Completed ${earlierCompletedCount === 1 ? 'Officer' : 'Officers'}`}
                   </span>
                 </button>
+              </div>
+            )}
+
+            {/* After the daily reset the queue is empty until someone fills
+                it in, so the wall display needs to say so rather than show a
+                blank screen. */}
+            {fullScreenSchedule.length === 0 && (
+              <div className="md-fs-empty">
+                <div className="md-fs-empty-icon">
+                  <Users size={54} />
+                </div>
+                <h2>Queue cleared for {activeDay.name}</h2>
+                <p>
+                  {activeDay.isWorkDay
+                    ? 'No officers assigned yet. Add them from any connected station — this display updates live.'
+                    : `${activeDay.name} is not a working day.`}
+                </p>
               </div>
             )}
 

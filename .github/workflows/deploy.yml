@@ -33,6 +33,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
       # Firebase web config is injected at build time. These are repository
       # secrets, not environment secrets, so add them under
       # Settings -> Secrets and variables -> Actions -> Repository secrets.

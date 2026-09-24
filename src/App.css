@@ -1669,6 +1669,60 @@
   opacity: 0.85;
 }
 
+/* Empty state for the wall display, shown after the daily reset clears the
+   queue and before anyone has filled it in. */
+.md-fs-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 1.1rem;
+  padding: 3.5rem 2rem;
+  border: 2px dashed var(--md-sys-color-outline);
+  border-radius: var(--md-shape-lg);
+  background-image: var(--gradient-card);
+}
+
+.md-fs-empty-icon {
+  width: 104px;
+  height: 104px;
+  border-radius: var(--md-shape-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-primary);
+  border: 1px solid var(--status-dispatch-border);
+  box-shadow: var(--glow-primary);
+}
+
+.md-fs-empty h2 {
+  font-size: clamp(1.9rem, 3.6vw, 3rem);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.md-fs-empty p {
+  font-size: clamp(1rem, 1.5vw, 1.35rem);
+  color: var(--md-sys-color-on-surface-variant);
+  max-width: 44ch;
+  line-height: 1.5;
+}
+
+@media (max-width: 768px) {
+  .md-fs-empty {
+    padding: 2rem 1rem;
+    gap: 0.85rem;
+  }
+
+  .md-fs-empty-icon {
+    width: 68px;
+    height: 68px;
+  }
+}
+
 .md-fs-row-progress {
   position: absolute;
   bottom: 0;
