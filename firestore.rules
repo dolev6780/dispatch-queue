@@ -1,0 +1,61 @@
+rules_version = '2';
+
+// Firestore security rules for Dispatch Queue HQ.
+//
+// Deploy with:  firebase deploy --only firestore:rules
+// (or paste into Firebase Console -> Firestore Database -> Rules)
+//
+// ---------------------------------------------------------------------------
+// READ THIS BEFORE SHIPPING
+// ---------------------------------------------------------------------------
+// The app writes its shared state with no signed-in user, so these rules are
+// necessarily open to anonymous callers. The Firebase web config is public by
+// design (it ships inside the JS bundle), so anyone who opens the deployed
+// site can read it and talk to this project directly.
+//
+// What these rules DO give you over `allow read, write: if true`:
+//   * Only one document is reachable. Every other path is sealed, so nobody
+//     can use your project as free storage or read other collections.
+//   * The payload is loosely shape-checked and bounded, so the document
+//     cannot be replaced with arbitrary junk or grown without limit.
+//
+// What they DO NOT give you:
+//   * They do not stop a determined visitor from editing the roster, because
+//     there is no identity to check. If that matters, enable Firebase
+//     Anonymous Auth (or a real sign-in) plus App Check, then add
+//     `request.auth != null &&` to the `allow write` condition below.
+//
+// The shape check is deliberately lenient: a rule that is too strict fails
+// writes silently and looks like "sync is broken". Tighten it once you have
+// verified writes land — `hasOnly([...])` on the key set is the usual next
+// step, and the key list this app writes is roster, dayQueues, daySchedules,
+// updatedBy, updatedAt, createdAt.
+// ---------------------------------------------------------------------------
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // The single shared dispatch state document the app syncs.
+    // Note: the client uses setDoc(..., { merge: true }), so
+    // request.resource.data is the full document AFTER the merge.
+    match /dispatch_queue/shared_state {
+      allow read: if true;
+
+      allow write: if isSaneDispatchState(request.resource.data);
+    }
+
+    // Everything else is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+
+  // Lenient bounds check — rejects junk without being brittle about which
+  // optional fields happen to be present on a given write.
+  function isSaneDispatchState(data) {
+    return (!('roster' in data)       || (data.roster is list && data.roster.size() <= 200))
+        && (!('dayQueues' in data)    || (data.dayQueues is map && data.dayQueues.keys().size() <= 7))
+        && (!('daySchedules' in data) || (data.daySchedules is map && data.daySchedules.keys().size() <= 7))
+        && (!('updatedBy' in data)    || (data.updatedBy is string && data.updatedBy.size() <= 64));
+  }
+}

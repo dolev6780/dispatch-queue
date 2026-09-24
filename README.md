@@ -44,6 +44,53 @@ npm install
 npm run dev
 ```
 
+## Firebase Cloud Sync 🔥
+
+Sync is **optional**. With no configuration the app runs in **Local Mode**, persisting to `localStorage` — fully functional, just not shared between stations. Configure Firebase and every station sees the same queue in real time.
+
+Config is resolved in [`src/services/firebase.js`](./src/services/firebase.js) in this order:
+
+1. **Custom config in `localStorage`** — pasted through the in-app Firebase modal (click the status chip in the top bar). Per-browser, good for a quick trial.
+2. **Build-time env vars** — `VITE_FIREBASE_*`. This is what you want for a real deployment.
+
+### 1. Create the project
+
+In the [Firebase Console](https://console.firebase.google.com/): create a project → add a **Web app** → enable **Cloud Firestore**. Copy the config values from *Project Settings → General → Your apps*.
+
+### 2. Local development
+
+```bash
+cp .env.example .env.local   # .env.local is gitignored
+# then fill in the six VITE_FIREBASE_* values
+```
+
+### 3. Deployed builds
+
+**GitHub Pages** reads the values from repository secrets (wired up in [`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml)). Set them once with the `gh` CLI:
+
+```bash
+gh secret set VITE_FIREBASE_API_KEY
+gh secret set VITE_FIREBASE_AUTH_DOMAIN
+gh secret set VITE_FIREBASE_PROJECT_ID
+gh secret set VITE_FIREBASE_STORAGE_BUCKET
+gh secret set VITE_FIREBASE_MESSAGING_SENDER_ID
+gh secret set VITE_FIREBASE_APP_ID
+```
+
+Each command prompts for the value, so nothing lands in your shell history. Or add them under *Settings → Secrets and variables → Actions*. If the secrets are absent the build still succeeds and the app just starts in Local Mode.
+
+**Netlify** reads them from *Site configuration → Environment variables*.
+
+### 4. Security rules
+
+Deploy [`firestore.rules`](./firestore.rules) rather than the wide-open `allow read, write: if true`:
+
+```bash
+firebase deploy --only firestore:rules
+```
+
+> ⚠️ **The Firebase web config is public by design** — it ships inside the JS bundle, so anyone who opens the deployed site can read it. The supplied rules seal off every path except the single `dispatch_queue/shared_state` document and shape-check the payload, which stops your project being used as free storage. They **cannot** stop an anonymous visitor editing the roster, because the app has no sign-in. If the queue is sensitive, enable **Anonymous Auth + App Check** and require `request.auth != null` in the rules.
+
 ## Production Build
 
 ```bash

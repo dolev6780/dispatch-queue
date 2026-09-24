@@ -375,7 +375,7 @@ export function FirebaseModal({ isOpen, onClose, connectionState, onConfigChange
               <div className="md-firestore-hint">
                 <ShieldCheck size={16} color="var(--md-sys-color-primary)" />
                 <div>
-                  <strong>Firestore Rules Note:</strong> Make sure Cloud Firestore is enabled in your project and rules permit read/write access (e.g. <code>allow read, write: if true;</code> during development).
+                  <strong>Firestore Rules Note:</strong> Make sure Cloud Firestore is enabled in your project. Deploy the <code>firestore.rules</code> file from this repo rather than opening the database with <code>allow read, write: if true;</code> — it limits access to the single dispatch state document. Note that this config is embedded in the published page, so anyone who opens the site can read it.
                 </div>
               </div>
 
