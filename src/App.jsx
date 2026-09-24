@@ -23,63 +23,34 @@ import {
   BellOff,
   Sliders,
   RotateCcw,
-  Edit2,
   Settings2,
   Check,
-  X
+  X,
+  Cloud,
+  CloudOff,
+  RefreshCw,
+  Volume2,
+  Music,
+  Eye,
+  EyeOff
 } from 'lucide-react'
 import './App.css'
+import { FirebaseModal } from './components/FirebaseModal'
+import { SoundModal } from './components/SoundModal'
+import {
+  playShiftSound,
+  getSavedSoundChoice,
+  saveSoundChoice
+} from './services/soundEffects'
+import {
+  subscribeToDispatchState,
+  saveDispatchState,
+  getConnectionState,
+  onConnectionStatusChange,
+  getLocalCachedState
+} from './services/firebase'
 
-// Synthesize an authentic multi-tone service bell ring using Web Audio API
-const playBellRing = () => {
-  try {
-    const AudioCtx = window.AudioContext || window.webkitAudioContext
-    if (!AudioCtx) return
-    const ctx = new AudioCtx()
-    if (ctx.state === 'suspended') {
-      ctx.resume()
-    }
 
-    const now = ctx.currentTime
-
-    const strikeBell = (freq, time, decay, gainLevel = 0.38) => {
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-      osc.type = 'sine'
-      osc.frequency.setValueAtTime(freq, time)
-      osc.frequency.exponentialRampToValueAtTime(freq * 0.994, time + decay)
-
-      gain.gain.setValueAtTime(0.0001, time)
-      gain.gain.exponentialRampToValueAtTime(gainLevel, time + 0.012)
-      gain.gain.exponentialRampToValueAtTime(0.0001, time + decay)
-
-      // Harmonic overtone for crisp metallic bell chime
-      const overtone = ctx.createOscillator()
-      const overtoneGain = ctx.createGain()
-      overtone.type = 'sine'
-      overtone.frequency.setValueAtTime(freq * 2.76, time)
-      overtoneGain.gain.setValueAtTime(gainLevel * 0.28, time + 0.01)
-      overtoneGain.gain.exponentialRampToValueAtTime(0.0001, time + decay * 0.6)
-
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-      overtone.connect(overtoneGain)
-      overtoneGain.connect(ctx.destination)
-
-      osc.start(time)
-      overtone.start(time)
-      osc.stop(time + decay + 0.1)
-      overtone.stop(time + decay + 0.1)
-    }
-
-    // Melodic bell chime sequence (Ding - Dong - Chime)
-    strikeBell(1046.5, now, 1.5, 0.4)          // Ding (High C6)
-    strikeBell(1318.51, now + 0.22, 2.2, 0.45)    // Dong (High E6)
-    strikeBell(1567.98, now + 0.44, 2.6, 0.35)    // Chime (High G6)
-  } catch (err) {
-    console.warn('Audio Context error:', err)
-  }
-}
 
 // Base metadata for all 7 weekdays
 const BASE_DAYS_META = [
@@ -123,14 +94,14 @@ const SHIFT_PRESETS = [
   { label: '12:00 – 20:00 (Evening Shift)', start: '12:00', end: '20:00' }
 ]
 
-// Master team roster in Blue, White & Gray tones
+// Master team roster in Monochrome tones
 const INITIAL_ROSTER = [
-  { id: '1', name: 'Komer', role: 'Dispatch Specialist', color: '#2563eb' },
-  { id: '2', name: 'Alen', role: 'Dispatch Specialist', color: '#0284c7' },
-  { id: '3', name: 'Dani', role: 'Dispatch Specialist', color: '#38bdf8' },
-  { id: '4', name: 'Yair', role: 'Dispatch Specialist', color: '#1d4ed8' },
-  { id: '5', name: 'Chen', role: 'Dispatch Specialist', color: '#475569' },
-  { id: '6', name: 'Dolev', role: 'Dispatch Specialist', color: '#0ea5e9' }
+  { id: '1', name: 'Komer', role: 'Dispatch Specialist', color: '#2a2a2a' },
+  { id: '2', name: 'Alen', role: 'Dispatch Specialist', color: '#383838' },
+  { id: '3', name: 'Dani', role: 'Dispatch Specialist', color: '#444444' },
+  { id: '4', name: 'Yair', role: 'Dispatch Specialist', color: '#1f1f1f' },
+  { id: '5', name: 'Chen', role: 'Dispatch Specialist', color: '#505050' },
+  { id: '6', name: 'Dolev', role: 'Dispatch Specialist', color: '#333333' }
 ]
 
 // Default day assignments (Sunday - Thursday work days with all 6 workers; Friday & Saturday off)
@@ -152,10 +123,65 @@ function App() {
   const todayDayIndex = new Date().getDay()
   const [selectedDayKey, setSelectedDayKey] = useState(todayDayIndex)
 
-  // Roster and Day Queues state
-  const [roster, setRoster] = useState(INITIAL_ROSTER)
-  const [dayQueues, setDayQueues] = useState(INITIAL_DAY_QUEUES)
+  const cachedInitial = useMemo(() => getLocalCachedState({
+    roster: INITIAL_ROSTER,
+    dayQueues: INITIAL_DAY_QUEUES,
+    daySchedules: DEFAULT_DAY_SCHEDULES
+  }), [])
+
+  // Roster, Day Queues and Schedules state (synced with Firebase and LocalStorage)
+  const [roster, setRoster] = useState(cachedInitial.roster)
+  const [dayQueues, setDayQueues] = useState(cachedInitial.dayQueues)
+  const [daySchedules, setDaySchedules] = useState(cachedInitial.daySchedules)
   const [newRosterName, setNewRosterName] = useState('')
+
+  // Firebase Cloud Synchronization State
+  const [connectionState, setConnectionState] = useState(getConnectionState)
+  const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState(false)
+  const isRemoteUpdateRef = useRef(false)
+  const isInitialMountRefSync = useRef(true)
+
+  // Listen for real-time Firebase connection status changes
+  useEffect(() => {
+    return onConnectionStatusChange(setConnectionState)
+  }, [])
+
+  // Subscribe to real-time Cloud Firestore updates
+  useEffect(() => {
+    const unsubscribe = subscribeToDispatchState(
+      (remoteState) => {
+        if (!remoteState._fromSelf) {
+          isRemoteUpdateRef.current = true
+          if (remoteState.roster) setRoster(remoteState.roster)
+          if (remoteState.dayQueues) setDayQueues(remoteState.dayQueues)
+          if (remoteState.daySchedules) setDaySchedules(remoteState.daySchedules)
+        }
+      },
+      {
+        roster: INITIAL_ROSTER,
+        dayQueues: INITIAL_DAY_QUEUES,
+        daySchedules: DEFAULT_DAY_SCHEDULES
+      }
+    )
+    return () => unsubscribe()
+  }, [])
+
+  // Persist mutations to Cloud Firestore and Local Cache
+  useEffect(() => {
+    if (isInitialMountRefSync.current) {
+      isInitialMountRefSync.current = false
+      return
+    }
+    if (isRemoteUpdateRef.current) {
+      isRemoteUpdateRef.current = false
+      return
+    }
+    saveDispatchState({
+      roster,
+      dayQueues,
+      daySchedules
+    })
+  }, [roster, dayQueues, daySchedules])
 
   // Drag and Drop State
   const [draggedItem, setDraggedItem] = useState(null)
@@ -175,12 +201,14 @@ function App() {
 
   // Full Screen Mode state
   const [isFullScreen, setIsFullScreen] = useState(false)
+  const [showAllInFullScreen, setShowAllInFullScreen] = useState(false)
 
   const toggleFullScreen = () => {
     if (!isFullScreen) {
       if (document.documentElement.requestFullscreen) {
         document.documentElement.requestFullscreen().catch(() => {})
       }
+      setShowAllInFullScreen(false)
       setIsFullScreen(true)
     } else {
       if (document.fullscreenElement && document.exitFullscreen) {
@@ -212,28 +240,6 @@ function App() {
   const toggleTheme = () => {
     setTheme(prev => (prev === 'dark' ? 'light' : 'dark'))
   }
-
-  // Per-day custom schedules (persisted in localStorage)
-  const [daySchedules, setDaySchedules] = useState(() => {
-    try {
-      const saved = localStorage.getItem('dispatch_day_schedules_v1')
-      if (saved) {
-        return JSON.parse(saved)
-      }
-    } catch (err) {
-      console.warn('Could not parse stored day schedules:', err)
-    }
-    return DEFAULT_DAY_SCHEDULES
-  })
-
-  // Synchronize custom schedules to localStorage
-  useEffect(() => {
-    try {
-      localStorage.setItem('dispatch_day_schedules_v1', JSON.stringify(daySchedules))
-    } catch (err) {
-      console.warn('Could not save day schedules to storage:', err)
-    }
-  }, [daySchedules])
 
   // Computed days of week with live custom hours & metadata
   const daysOfWeek = useMemo(() => {
@@ -313,7 +319,7 @@ function App() {
     setToastNotification({
       title: 'Schedule Updated',
       message: `Shift hours for ${BASE_DAYS_META[editingDayKey].name} set to ${editForm.isWorkDay ? `${editForm.startTime} – ${editForm.endTime}` : 'Non-Working Day'}.`,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      time: formatClockTime(new Date())
     })
 
     setEditingDayKey(null)
@@ -371,13 +377,31 @@ function App() {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`
   }
 
-  // Helper: Format duration
-  const formatDuration = (mins) => {
-    const h = Math.floor(mins / 60)
-    const m = Math.round(mins % 60)
-    if (h === 0) return `${m}m`
-    if (m === 0) return `${h}h`
-    return `${h}h ${m}m`
+  // Helper: Format duration with hours and minutes
+  const formatDuration = (mins, forceHours = true) => {
+    const total = Math.max(0, Math.round(mins))
+    const h = Math.floor(total / 60)
+    const m = total % 60
+    if (h === 0 && !forceHours) return `${m}m`
+    return `${h}h ${String(m).padStart(2, '0')}m`
+  }
+
+  // Helper: Format countdown and remaining time with hours and minutes
+  const formatTimeRemaining = (mins) => {
+    const total = Math.max(0, Math.ceil(mins))
+    const h = Math.floor(total / 60)
+    const m = total % 60
+    return `${h}h ${String(m).padStart(2, '0')}m`
+  }
+
+  // Helper: Format clock in 24h format (HH:MM:SS or HH:MM)
+  const formatClockTime = (date, includeSeconds = true) => {
+    return date.toLocaleTimeString([], {
+      hour: '2-digit',
+      minute: '2-digit',
+      ...(includeSeconds ? { second: '2-digit' } : {}),
+      hour12: false
+    })
   }
 
   // Generate continuous schedule if it is a work day
@@ -437,14 +461,39 @@ function App() {
   // Find person currently serving
   const currentServingPerson = schedule.find(p => p.status === 'serving')
   const nextInLinePerson = schedule.find(p => p.status === 'up-next')
+  const currentServingIndex = schedule.findIndex(p => p.status === 'serving')
+
+  // In full-screen mode, always show the current worker and the worker directly above them (hide earlier completed officers)
+  let earlierCompletedCount = 0
+  if (currentServingIndex > 1) {
+    earlierCompletedCount = currentServingIndex - 1
+  } else if (currentServingIndex === -1 && isSelectedDayToday) {
+    const firstUpcomingIdx = schedule.findIndex(p => p.status === 'up-next' || p.status === 'scheduled')
+    if (firstUpcomingIdx > 1) {
+      earlierCompletedCount = firstUpcomingIdx - 1
+    } else if (firstUpcomingIdx === -1 && schedule.length > 2) {
+      earlierCompletedCount = schedule.length - 2
+    }
+  }
+
+  const fullScreenSchedule = (showAllInFullScreen || earlierCompletedCount <= 0)
+    ? schedule
+    : schedule.slice(earlierCompletedCount)
 
   // Bell Sound and Shift Turnover Notification
   const [soundEnabled, setSoundEnabled] = useState(true)
+  const [selectedSoundId, setSelectedSoundId] = useState(getSavedSoundChoice)
+  const [isSoundModalOpen, setIsSoundModalOpen] = useState(false)
   const [toastNotification, setToastNotification] = useState(null)
   const previousServingIdRef = useRef(null)
   const isInitialMountRef = useRef(true)
 
-  // Monitor shift turnover and trigger bell ring
+  const handleSelectSound = (soundId) => {
+    setSelectedSoundId(soundId)
+    saveSoundChoice(soundId)
+  }
+
+  // Monitor shift turnover and trigger turnover sound
   useEffect(() => {
     if (!activeDay.isWorkDay) return
 
@@ -452,20 +501,20 @@ function App() {
       ? currentServingPerson.id
       : (nowMinutes >= shiftEndMinutes ? 'SHIFT_COMPLETED' : 'BEFORE_START')
 
-    // Do not trigger bell on initial page load
+    // Do not trigger sound on initial page load
     if (isInitialMountRef.current) {
       previousServingIdRef.current = currentId
       isInitialMountRef.current = false
       return
     }
 
-    // Trigger bell when a shift concludes
+    // Trigger turnover alert when a shift concludes
     if (previousServingIdRef.current && previousServingIdRef.current !== currentId) {
       const prevOfficer = roster.find(p => p.id === previousServingIdRef.current)
 
       if (previousServingIdRef.current !== 'BEFORE_START' && previousServingIdRef.current !== 'SHIFT_COMPLETED') {
         if (soundEnabled) {
-          playBellRing()
+          playShiftSound(selectedSoundId)
         }
 
         const isDayDone = currentId === 'SHIFT_COMPLETED'
@@ -477,7 +526,7 @@ function App() {
         setToastNotification({
           title,
           message,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+          time: formatClockTime(new Date())
         })
 
         const timer = setTimeout(() => setToastNotification(null), 8000)
@@ -487,20 +536,20 @@ function App() {
     }
 
     previousServingIdRef.current = currentId
-  }, [currentServingPerson, nowMinutes, shiftEndMinutes, soundEnabled, activeDay.isWorkDay, activeDay.name, roster])
+  }, [currentServingPerson, nowMinutes, shiftEndMinutes, soundEnabled, selectedSoundId, activeDay.isWorkDay, activeDay.name, roster])
 
   const toggleSound = () => {
     setSoundEnabled(prev => !prev)
   }
 
   const handleTestBell = () => {
-    playBellRing()
+    playShiftSound(selectedSoundId)
     setToastNotification({
-      title: 'Shift Over Bell Alert',
+      title: 'Shift Over Alert Test',
       message: currentServingPerson
-        ? `Bell notification test: Signals when ${currentServingPerson.name}'s slot finishes.`
-        : 'Bell notification test: Signals when dispatch shifts conclude.',
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        ? `Turnover alert test: Signals when ${currentServingPerson.name}'s slot finishes.`
+        : 'Turnover alert test: Signals when dispatch shifts conclude.',
+      time: formatClockTime(new Date())
     })
   }
 
@@ -612,7 +661,7 @@ function App() {
     e.preventDefault()
     if (!newRosterName.trim()) return
 
-    const colors = ['#2563eb', '#0284c7', '#38bdf8', '#1d4ed8', '#475569', '#0ea5e9', '#64748b']
+    const colors = ['#2a2a2a', '#383838', '#444444', '#1f1f1f', '#505050', '#333333', '#5a5a5a']
     const newColor = colors[roster.length % colors.length]
 
     const newPerson = {
@@ -678,33 +727,66 @@ function App() {
           </div>
 
           <div className="md-app-bar-actions">
+            {/* Firebase Cloud Synchronization Status Chip */}
+            <button
+              className={`md-firebase-chip md-firebase-${connectionState.status}`}
+              onClick={() => setIsFirebaseModalOpen(true)}
+              title={`Cloud Sync Status: ${connectionState.status}. Click to open Firebase settings.`}
+            >
+              <span className="md-firebase-pulse-dot" />
+              {connectionState.status === 'connected' ? (
+                <>
+                  <Cloud size={14} />
+                  <span>Cloud Synced</span>
+                </>
+              ) : connectionState.status === 'connecting' ? (
+                <>
+                  <RefreshCw size={14} className="bell-ringing" />
+                  <span>Connecting...</span>
+                </>
+              ) : connectionState.status === 'error' ? (
+                <>
+                  <AlertCircle size={14} />
+                  <span>Sync Issue</span>
+                </>
+              ) : (
+                <>
+                  <CloudOff size={14} />
+                  <span>Local Mode</span>
+                </>
+              )}
+            </button>
+
             <div className="md-clock-chip">
               <span className="md-pulse-dot" />
-              <span>
-                {currentTime.toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  second: '2-digit'
-                })}
-              </span>
+              <span>{formatClockTime(currentTime)}</span>
             </div>
 
             <button
               className={`md-sound-btn ${soundEnabled ? 'is-active' : ''}`}
               onClick={toggleSound}
-              title={soundEnabled ? 'Bell sound is enabled (Click to mute)' : 'Bell sound is muted (Click to enable)'}
+              title={soundEnabled ? 'Turnover sound is enabled (Click to mute)' : 'Turnover sound is muted (Click to enable)'}
             >
               {soundEnabled ? <Bell size={15} color="var(--md-sys-color-primary)" /> : <BellOff size={15} />}
-              <span>{soundEnabled ? 'Bell ON' : 'Muted'}</span>
+              <span>{soundEnabled ? 'Sound ON' : 'Muted'}</span>
             </button>
 
             <button
               className="md-button md-button-tonal"
               onClick={handleTestBell}
-              title="Test bell ring sound for shift turnover"
+              title="Test current shift turnover sound"
             >
-              <Bell size={15} />
-              <span>Test Bell</span>
+              <Volume2 size={15} />
+              <span>Test Sound</span>
+            </button>
+
+            <button
+              className="md-button md-button-tonal"
+              onClick={() => setIsSoundModalOpen(true)}
+              title="Change worker turnover sound effect"
+            >
+              <Music size={15} />
+              <span>Change Sound</span>
             </button>
 
             <button
@@ -779,13 +861,22 @@ function App() {
                   title={`View schedule for ${day.name}`}
                 >
                   <div className="md-chip-name">
-                    <span>{day.name}</span>
+                    <span className="md-chip-day-full">{day.name}</span>
+                    <span className="md-chip-day-short">{day.short}</span>
                     {isToday && <span className="md-chip-today-tag">TODAY</span>}
                     {day.isCustom && <span className="md-chip-custom-tag">CUSTOM</span>}
                   </div>
-                  <span className="md-chip-sub">
-                    {day.isWorkDay ? `${day.startTime}–${day.endTime} • ${dayCount} on duty` : 'OFF DAY'}
-                  </span>
+                  <div className="md-chip-sub">
+                    {day.isWorkDay ? (
+                      <>
+                        <span>{day.startTime}–{day.endTime}</span>
+                        <span className="md-chip-dot">•</span>
+                        <span>{dayCount} on duty</span>
+                      </>
+                    ) : (
+                      <span>OFF DAY</span>
+                    )}
+                  </div>
                 </button>
 
                 <button
@@ -852,7 +943,7 @@ function App() {
                 {currentServingPerson ? (
                   <>
                     <div className="md-officer-info">
-                      <div className="md-avatar" style={{ background: currentServingPerson.color }}>
+                      <div className="md-avatar">
                         {currentServingPerson.name.split(' ').map(n => n[0]).join('')}
                       </div>
                       <div className="md-officer-details">
@@ -864,7 +955,7 @@ function App() {
                     <div className="md-countdown-display">
                       <span className="md-countdown-label">Time Remaining</span>
                       <span className="md-countdown-value">
-                        {currentServingPerson.remainingMinutes} min
+                        {formatTimeRemaining(currentServingPerson.remainingMinutes)}
                       </span>
                     </div>
                   </>
@@ -943,12 +1034,14 @@ function App() {
                   {schedule.map(person => (
                     <div
                       key={person.id}
-                      className={`md-timeline-segment ${person.status === 'serving' ? 'is-active' : ''}`}
-                      style={{
-                        flex: 1,
-                        background: person.color,
-                        opacity: person.status === 'completed' ? 0.35 : person.status === 'serving' ? 1 : 0.85
-                      }}
+                      className={`md-timeline-segment ${
+                        person.status === 'serving'
+                          ? 'is-active'
+                          : person.status === 'completed'
+                          ? 'is-completed'
+                          : 'is-queue'
+                      }`}
+                      style={{ flex: 1 }}
                       title={`${person.name}: ${person.startTimeStr} – ${person.endTimeStr}`}
                     >
                       #{person.position} {person.name.split(' ')[0]} ({person.startTimeStr})
@@ -960,7 +1053,7 @@ function App() {
                   <span>{formatTime(shiftStartMinutes)}</span>
                   {isSelectedDayToday ? (
                     <span style={{ color: 'var(--md-sys-color-primary)', fontWeight: 600 }}>
-                      ▲ Current Time ({currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })})
+                      ▲ Current Time ({formatClockTime(currentTime, false)})
                     </span>
                   ) : (
                     <span>{activeDay.name} Shift</span>
@@ -1129,7 +1222,7 @@ function App() {
                           <span className="md-grip-icon" title="Drag into queue">
                             <GripVertical size={14} />
                           </span>
-                          <div className="md-roster-avatar" style={{ background: person.color }}>
+                          <div className="md-roster-avatar">
                             {person.name.split(' ').map(n => n[0]).join('')}
                           </div>
                           <div className="md-roster-text">
@@ -1375,52 +1468,68 @@ function App() {
         <div className="md-fullscreen-overlay">
           {/* Minimal Header */}
           <div className="md-fs-header">
-            <div className="md-fs-date-block">
-              <div className="md-fs-date">{formattedTodayDate}</div>
-              <div className="md-fs-shift">
-                <Clock size={16} />
-                <span>
-                  {activeDay.name} Shift: {activeDay.hours} ({count} Officers)
-                </span>
+            <div className="md-fs-header-top">
+              <div className="md-fs-date-block">
+                <div className="md-fs-date">{formattedTodayDate}</div>
+                <div className="md-fs-shift">
+                  <Clock size={20} />
+                  <span>
+                    {activeDay.name} Shift: {activeDay.hours} ({count} Officers)
+                  </span>
+                </div>
+              </div>
+
+              <div className="md-fs-controls">
+                <button
+                  className={`md-sound-btn ${soundEnabled ? 'is-active' : ''}`}
+                  onClick={toggleSound}
+                  title={soundEnabled ? 'Turnover sound is enabled' : 'Turnover sound is muted'}
+                >
+                  {soundEnabled ? <Bell size={18} color="var(--md-sys-color-primary)" /> : <BellOff size={18} />}
+                  <span>{soundEnabled ? 'Sound ON' : 'Muted'}</span>
+                </button>
+
+                <button className="md-button md-button-tonal" onClick={handleTestBell} title="Test Turnover Sound">
+                  <Volume2 size={18} />
+                  <span>Test Sound</span>
+                </button>
+
+                <button className="md-button md-button-tonal" onClick={toggleFullScreen} title="Exit Full Screen">
+                  <Minimize2 size={18} />
+                  <span>Exit</span>
+                </button>
               </div>
             </div>
 
-            <div className="md-fs-clock-block">
-              <div className="md-fs-time">
-                <span className="md-pulse-dot" style={{ width: '10px', height: '10px' }} />
-                <span>
-                  {currentTime.toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
-                  })}
-                </span>
-              </div>
-
-              <button
-                className={`md-sound-btn ${soundEnabled ? 'is-active' : ''}`}
-                onClick={toggleSound}
-                title={soundEnabled ? 'Bell sound is enabled' : 'Bell sound is muted'}
-              >
-                {soundEnabled ? <Bell size={15} color="var(--md-sys-color-primary)" /> : <BellOff size={15} />}
-                <span>{soundEnabled ? 'Bell ON' : 'Muted'}</span>
-              </button>
-
-              <button className="md-button md-button-tonal" onClick={handleTestBell} title="Test Bell Sound">
-                <Bell size={15} />
-                <span>Test Bell</span>
-              </button>
-
-              <button className="md-button md-button-tonal" onClick={toggleFullScreen}>
-                <Minimize2 size={16} />
-                <span>Exit</span>
-              </button>
+            {/* Master Clock Banner - uses all available width in 24h format */}
+            <div className="md-fs-master-clock" title="Dispatch Master Time (24h)">
+              <span className="md-pulse-dot md-fs-pulse-dot" />
+              <span className="md-fs-clock-digits">
+                {formatClockTime(currentTime)}
+              </span>
             </div>
           </div>
 
-          {/* Minimal Workers List */}
+          {/* Focused Workers List: Always Shows Current Worker and Worker Directly Above */}
           <div className="md-fs-list">
-            {schedule.map(person => {
+            {earlierCompletedCount > 0 && (
+              <div className="md-fs-earlier-bar">
+                <button
+                  className="md-fs-earlier-btn"
+                  onClick={() => setShowAllInFullScreen(prev => !prev)}
+                  title={showAllInFullScreen ? 'Focus on current officer and previous officer' : 'Show all earlier completed officers'}
+                >
+                  {showAllInFullScreen ? <EyeOff size={18} /> : <Eye size={18} />}
+                  <span>
+                    {showAllInFullScreen
+                      ? 'Hide Earlier Completed Officers'
+                      : `Show ${earlierCompletedCount} Earlier Completed ${earlierCompletedCount === 1 ? 'Officer' : 'Officers'}`}
+                  </span>
+                </button>
+              </div>
+            )}
+
+            {fullScreenSchedule.map(person => {
               const isServing = person.status === 'serving'
               const isCompleted = person.status === 'completed'
               const minsUntilStart = Math.max(0, Math.ceil(person.startMins - nowMinutes))
@@ -1438,9 +1547,9 @@ function App() {
 
                   {/* Center: Start & End Time */}
                   <div className="md-fs-center">
-                    <div>
-                      <span style={{ fontSize: '0.72rem', display: 'block', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--md-sys-color-on-surface-variant)', fontWeight: 500 }}>Shift Window</span>
-                      <span>
+                    <div className="md-fs-center-block">
+                      <span className="md-fs-center-label">Shift Window</span>
+                      <span className="md-fs-center-time">
                         {person.startTimeStr} – {person.endTimeStr}
                       </span>
                     </div>
@@ -1450,22 +1559,18 @@ function App() {
                   <div className="md-fs-right">
                     {isServing ? (
                       <div className="md-fs-time-left md-time-left-active">
-                        <span className="md-pulse-dot" style={{ width: '7px', height: '7px' }} />
-                        <span>{person.remainingMinutes} min left</span>
+                        <span className="md-pulse-dot" style={{ width: '10px', height: '10px' }} />
+                        <span>{formatTimeRemaining(person.remainingMinutes)} left</span>
                       </div>
                     ) : isCompleted ? (
                       <div className="md-fs-time-left md-time-left-done">
-                        <CheckCircle size={16} />
+                        <CheckCircle size={22} />
                         <span>Finished</span>
                       </div>
                     ) : (
                       <div className="md-fs-time-left md-time-left-upcoming">
-                        <Clock size={16} />
-                        <span>
-                          {minsUntilStart < 60
-                            ? `Starts in ${minsUntilStart}m`
-                            : `Starts in ${formatDuration(minsUntilStart)}`}
-                        </span>
+                        <Clock size={22} />
+                        <span>Starts in {formatTimeRemaining(minsUntilStart)}</span>
                       </div>
                     )}
                   </div>
@@ -1483,6 +1588,38 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Firebase Cloud Synchronization & Settings Modal */}
+      <FirebaseModal
+        isOpen={isFirebaseModalOpen}
+        onClose={() => setIsFirebaseModalOpen(false)}
+        connectionState={connectionState}
+        onConfigChanged={() => {
+          subscribeToDispatchState(
+            (remoteState) => {
+              if (!remoteState._fromSelf) {
+                isRemoteUpdateRef.current = true
+                if (remoteState.roster) setRoster(remoteState.roster)
+                if (remoteState.dayQueues) setDayQueues(remoteState.dayQueues)
+                if (remoteState.daySchedules) setDaySchedules(remoteState.daySchedules)
+              }
+            },
+            {
+              roster: INITIAL_ROSTER,
+              dayQueues: INITIAL_DAY_QUEUES,
+              daySchedules: DEFAULT_DAY_SCHEDULES
+            }
+          )
+        }}
+      />
+
+      {/* Shift Turnover Sound Selector Modal */}
+      <SoundModal
+        isOpen={isSoundModalOpen}
+        onClose={() => setIsSoundModalOpen(false)}
+        selectedSoundId={selectedSoundId}
+        onSelectSound={handleSelectSound}
+      />
     </div>
   )
 }

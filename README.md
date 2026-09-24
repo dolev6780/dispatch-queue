@@ -14,6 +14,7 @@ A real-time dispatch queue and officer shift management application built with *
 ## Tech Stack
 
 - **Framework**: React 19 + Vite
+- **Database & Sync**: Google Firebase (Cloud Firestore)
 - **Icons**: Lucide React
 - **Styling**: Vanilla CSS with Material Design 3 Design Tokens
 - **Audio**: Web Audio API procedural synthesis (zero audio files needed)
@@ -30,3 +31,28 @@ npm run dev
 ```bash
 npm run build
 ```
+
+## Deploying to Netlify 🌐
+
+This project includes pre-configured [`netlify.toml`](./netlify.toml) with SPA redirects, caching, and security headers.
+
+### Option 1: Git Continuous Deployment (Recommended)
+1. Push your changes to GitHub (`dolev6780/dispatch-queue`).
+2. Log in to [Netlify](https://app.netlify.com/) and click **"Add new site"** > **"Import an existing project"**.
+3. Choose **GitHub** and select `dispatch-queue`.
+4. The build settings will automatically be populated from `netlify.toml` (`npm run build`, publish directory `dist`).
+5. Under **Site configuration** > **Environment variables**, optionally set your Firebase variables from `.env.example`.
+6. Click **Deploy**.
+
+### Option 2: Netlify CLI
+```bash
+# 1. Log in to your Netlify account
+npx netlify login
+
+# 2. Initialize and link site
+npx netlify init
+
+# 3. Deploy to production
+npx netlify deploy --prod
+```
+
