@@ -1,4 +1,4 @@
-import { initializeApp, getApps, getApp, deleteApp } from 'firebase/app'
+import { initializeApp, getApps, getApp } from 'firebase/app'
 import {
   getFirestore,
   doc,
@@ -10,7 +10,6 @@ import {
 // Generate a random client session ID to identify the current station/tab
 export const CLIENT_ID = 'client_' + Math.random().toString(36).substring(2, 9)
 
-const CUSTOM_CONFIG_KEY = 'dispatch_custom_firebase_config'
 const LOCAL_ROSTER_KEY = 'dispatch_roster_v1'
 const LOCAL_DAY_QUEUES_KEY = 'dispatch_day_queues_v1'
 const LOCAL_DAY_SCHEDULES_KEY = 'dispatch_day_schedules_v1'
@@ -25,7 +24,9 @@ let activeUnsubscribe = null
 let statusListeners = new Set()
 
 let connectionState = {
-  status: 'unconfigured', // 'unconfigured' | 'connecting' | 'connected' | 'offline' | 'error'
+  // 'unconfigured' now means the build is missing its VITE_FIREBASE_* values,
+  // which is a misconfiguration rather than a supported offline mode.
+  status: 'unconfigured', // 'unconfigured' | 'connecting' | 'connected' | 'error'
   projectId: null,
   isConfigured: false,
   lastSyncTime: null,
@@ -51,21 +52,17 @@ export const onConnectionStatusChange = (listener) => {
 export const getConnectionState = () => ({ ...connectionState })
 
 /**
- * Resolve active Firebase configuration from localStorage or Vite environment variables
+ * Resolve Firebase configuration from the build-time environment.
+ *
+ * Configuration comes from VITE_FIREBASE_* only. There is deliberately no
+ * in-app config entry and no offline-only mode: the app is a single shared
+ * board, so a station that is not talking to Firestore is misconfigured
+ * rather than running in a valid alternative mode.
+ *
+ * The localStorage cache below is a different thing and is kept — it is what
+ * carries a station through a brief network drop, not a mode.
  */
 export const getActiveFirebaseConfig = () => {
-  try {
-    const custom = localStorage.getItem(CUSTOM_CONFIG_KEY)
-    if (custom) {
-      const parsed = JSON.parse(custom)
-      if (parsed && parsed.apiKey && parsed.projectId) {
-        return { ...parsed, _source: 'custom' }
-      }
-    }
-  } catch (err) {
-    console.warn('Could not read custom Firebase config:', err)
-  }
-
   const envConfig = {
     apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
     authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
@@ -131,58 +128,6 @@ export const initFirebase = () => {
     notifyStatusListeners()
     return null
   }
-}
-
-/**
- * Save custom Firebase credentials from the UI
- */
-export const saveCustomFirebaseConfig = async (config) => {
-  if (!config || !config.apiKey || !config.projectId) {
-    throw new Error('API Key and Project ID are required.')
-  }
-
-  localStorage.setItem(CUSTOM_CONFIG_KEY, JSON.stringify(config))
-
-  if (activeUnsubscribe) {
-    activeUnsubscribe()
-    activeUnsubscribe = null
-  }
-
-  if (currentApp) {
-    try {
-      await deleteApp(currentApp)
-    } catch {
-      // Ignore cleanup error
-    }
-    currentApp = null
-    currentDb = null
-  }
-
-  initFirebase()
-}
-
-/**
- * Clear custom configuration and revert to .env or local mode
- */
-export const clearCustomFirebaseConfig = async () => {
-  localStorage.removeItem(CUSTOM_CONFIG_KEY)
-
-  if (activeUnsubscribe) {
-    activeUnsubscribe()
-    activeUnsubscribe = null
-  }
-
-  if (currentApp) {
-    try {
-      await deleteApp(currentApp)
-    } catch {
-      // Ignore cleanup error
-    }
-    currentApp = null
-    currentDb = null
-  }
-
-  initFirebase()
 }
 
 /**

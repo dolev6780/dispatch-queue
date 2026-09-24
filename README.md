@@ -26,7 +26,8 @@ Beyond color, the theme layer adds glassmorphic surfaces, gradient accents with 
 - 🔔 **Shift-Over Bell Ring Sound**: Synthesizes an authentic service chime using the native **Web Audio API** when an officer's shift concludes or when shifts turn over.
 - 🎯 **On-Duty Spotlight Row**: The active serving officer's row fills with the accent gradient and carries a slow breathing glow, while the badge and pills invert so they stay legible against it.
 - 🖥️ **Minimal Full Screen Mode**: Distraction-free dashboard for wall-mounted command center displays.
-- 🔄 **Drag-and-Drop Roster**: Easily rearrange or reorder officers for the current day's dispatch queue.
+- ✅ **Tap-to-Build Queue**: A single list — queued officers on top with their shift windows, everyone else below. Tap to add or remove, arrows to reorder. No dragging, so it behaves identically on a phone, a tablet and the wall PC.
+- 🧹 **Daily Reset**: The queue empties at midnight. Whichever station is open first performs the reset and the rest see it as already done.
 - 🌓 **Dark & Light Mode**: Seamless theme toggle; both directions are contrast-audited rather than just inverted.
 
 ## Tech Stack
@@ -43,7 +44,7 @@ The app is a small multi-module shell. Navigation is hash-based (`#/queue`) rath
 
 ```
 src/
-  App.jsx                  shell: routing, shared state wiring, modals
+  App.jsx                  shell: routing, shared state wiring, dialogs
   hooks/
     useHashRoute.js        two-route hash router (no router dependency)
     useDispatchData.js     synced state, daily reset, day rollover, clock
@@ -79,12 +80,11 @@ npm run dev
 
 ## Firebase Cloud Sync 🔥
 
-Sync is **optional**. With no configuration the app runs in **Local Mode**, persisting to `localStorage` — fully functional, just not shared between stations. Configure Firebase and every station sees the same queue in real time.
+Firebase is **required**. The app is one shared board, so there is no offline-only mode and no in-app configuration screen — a station that is not talking to Firestore is misconfigured, not running a valid alternative. The status chip in the top bar reports `Live` / `Connecting` / `Sync issue` / `Not configured` and is read-only.
 
-Config is resolved in [`src/services/firebase.js`](./src/services/firebase.js) in this order:
+Config comes from build-time env vars (`VITE_FIREBASE_*`) and nothing else; see [`src/services/firebase.js`](./src/services/firebase.js).
 
-1. **Custom config in `localStorage`** — pasted through the in-app Firebase modal (click the status chip in the top bar). Per-browser, good for a quick trial.
-2. **Build-time env vars** — `VITE_FIREBASE_*`. This is what you want for a real deployment.
+> `localStorage` is still used, but only as a **cache**: it carries a station through a brief network drop and seeds the first paint. It is not a mode and never diverges from Firestore for long.
 
 ### 1. Create the project
 
@@ -110,7 +110,7 @@ gh secret set VITE_FIREBASE_MESSAGING_SENDER_ID
 gh secret set VITE_FIREBASE_APP_ID
 ```
 
-Each command prompts for the value, so nothing lands in your shell history. Or add them under *Settings → Secrets and variables → Actions*. If the secrets are absent the build still succeeds and the app just starts in Local Mode.
+Each command prompts for the value, so nothing lands in your shell history. Or add them under *Settings → Secrets and variables → Actions*. If the secrets are absent the build still succeeds, but the app will show **Not configured** and will not sync.
 
 **Netlify** reads them from *Site configuration → Environment variables*.
 
@@ -139,7 +139,7 @@ This project includes pre-configured [`netlify.toml`](./netlify.toml) with SPA r
 2. Log in to [Netlify](https://app.netlify.com/) and click **"Add new site"** > **"Import an existing project"**.
 3. Choose **GitHub** and select `dispatch-queue`.
 4. The build settings will automatically be populated from `netlify.toml` (`npm run build`, publish directory `dist`).
-5. Under **Site configuration** > **Environment variables**, optionally set your Firebase variables from `.env.example`.
+5. Under **Site configuration** > **Environment variables**, set your Firebase variables from `.env.example`. These are required — without them the app cannot sync.
 6. Click **Deploy**.
 
 ### Option 2: Netlify CLI

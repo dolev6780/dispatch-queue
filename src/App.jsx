@@ -3,7 +3,6 @@ import { Bell } from 'lucide-react'
 import './App.css'
 
 import { AppBar } from './components/AppBar'
-import { FirebaseModal } from './components/FirebaseModal'
 import { SoundModal } from './components/SoundModal'
 import { FullScreenBoard } from './components/FullScreenBoard'
 import { DayScheduleDialog } from './components/DayScheduleDialog'
@@ -36,8 +35,7 @@ function App() {
     dayQueues,
     setDayQueues,
     daySchedules,
-    setDaySchedules,
-    resubscribe
+    setDaySchedules
   } = useDispatchData()
 
   // ---- Theme -------------------------------------------------------------
@@ -114,7 +112,6 @@ function App() {
 
   // ---- Connection status --------------------------------------------------
   const [connectionState, setConnectionState] = useState(getConnectionState)
-  const [isFirebaseModalOpen, setIsFirebaseModalOpen] = useState(false)
   useEffect(() => onConnectionStatusChange(setConnectionState), [])
 
   // ---- Sound & turnover notification --------------------------------------
@@ -364,7 +361,6 @@ function App() {
         theme={theme}
         onToggleTheme={() => setTheme(current => (current === 'dark' ? 'light' : 'dark'))}
         connectionState={connectionState}
-        onOpenFirebase={() => setIsFirebaseModalOpen(true)}
         currentTime={currentTime}
       />
 
@@ -417,13 +413,6 @@ function App() {
           onClose={() => setEditingDayKey(null)}
         />
       )}
-
-      <FirebaseModal
-        isOpen={isFirebaseModalOpen}
-        onClose={() => setIsFirebaseModalOpen(false)}
-        connectionState={connectionState}
-        onConfigChanged={resubscribe}
-      />
 
       <SoundModal
         isOpen={isSoundModalOpen}

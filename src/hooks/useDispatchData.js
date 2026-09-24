@@ -131,7 +131,6 @@ export const useDispatchData = () => {
     setDayQueues,
     daySchedules,
     setDaySchedules,
-    isStateLoaded,
-    resubscribe: () => subscribeToDispatchState(applyRemoteState, SYNC_DEFAULTS)
+    isStateLoaded
   }
 }

@@ -1,4 +1,4 @@
-import { Radio, Sun, Moon, Cloud, CloudOff, AlertCircle, RefreshCw, LayoutGrid, ListOrdered } from 'lucide-react'
+import { Radio, Sun, Moon, Cloud, AlertCircle, RefreshCw, LayoutGrid, ListOrdered } from 'lucide-react'
 import { formatClockTime } from '../services/schedule'
 
 const NAV_TABS = [
@@ -19,7 +19,6 @@ export const AppBar = ({
   theme,
   onToggleTheme,
   connectionState,
-  onOpenFirebase,
   currentTime
 }) => (
   <header className="md-app-bar">
@@ -56,22 +55,34 @@ export const AppBar = ({
       </nav>
 
       <div className="md-app-bar-actions">
-        <button
+        {/* Read-only status. There is no local mode and no in-app config, so
+            this reports the connection rather than opening anything. It stays
+            because a wall display that has quietly stopped syncing looks
+            identical to one that is up to date. */}
+        <div
           className={`md-firebase-chip md-firebase-${connectionState.status}`}
-          onClick={onOpenFirebase}
-          title={`Cloud sync status: ${connectionState.status}. Click to open sync settings.`}
+          role="status"
+          title={
+            connectionState.status === 'connected'
+              ? `Live sync active${connectionState.projectId ? ` · ${connectionState.projectId}` : ''}`
+              : connectionState.status === 'connecting'
+                ? 'Connecting to the shared board…'
+                : connectionState.status === 'error'
+                  ? `Sync problem: ${connectionState.error || 'connection lost'}`
+                  : 'Firebase configuration missing from this build'
+          }
         >
           <span className="md-firebase-pulse-dot" />
           {connectionState.status === 'connected' ? (
-            <><Cloud size={14} /><span>Synced</span></>
+            <><Cloud size={14} /><span>Live</span></>
           ) : connectionState.status === 'connecting' ? (
             <><RefreshCw size={14} className="bell-ringing" /><span>Connecting</span></>
           ) : connectionState.status === 'error' ? (
-            <><AlertCircle size={14} /><span>Sync Issue</span></>
+            <><AlertCircle size={14} /><span>Sync issue</span></>
           ) : (
-            <><CloudOff size={14} /><span>Local</span></>
+            <><AlertCircle size={14} /><span>Not configured</span></>
           )}
-        </button>
+        </div>
 
         <div className="md-clock-chip">
           <span className="md-pulse-dot" />
