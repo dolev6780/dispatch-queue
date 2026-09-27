@@ -56,7 +56,6 @@ export const useDispatchData = () => {
   const [isStateLoaded, setIsStateLoaded] = useState(false)
 
   const isRemoteUpdateRef = useRef(false)
-  const isInitialMountRef = useRef(true)
 
   // Live clock. Everything time-derived hangs off this, so a display left
   // running overnight notices the date change.
@@ -69,16 +68,16 @@ export const useDispatchData = () => {
   const todayDateKey = toDateKey(currentTime)
 
   const applyRemoteState = (remoteState) => {
-    // Mark loaded even for our own echo, so the daily reset is never left
-    // waiting on a snapshot that only ever comes back as self.
-    setIsStateLoaded(true)
-    if (remoteState._fromSelf) return
-
+    // Apply the payload before marking loaded, and apply it even for our own
+    // echo. Returning early on _fromSelf used to leave state empty while
+    // isStateLoaded was already true — a window in which the next change
+    // would save that emptiness over the shared board.
     isRemoteUpdateRef.current = true
     if (remoteState.roster) setRoster(remoteState.roster)
     if (remoteState.dayQueues) setDayQueues(remoteState.dayQueues)
     if (remoteState.daySchedules) setDaySchedules(remoteState.daySchedules)
     if (remoteState.lastResetDate) setLastResetDate(remoteState.lastResetDate)
+    setIsStateLoaded(true)
   }
 
   // Real-time subscription
@@ -88,18 +87,20 @@ export const useDispatchData = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Persist local mutations
+  // Persist local mutations.
+  //
+  // Never write before the first snapshot has been read. This replaces an
+  // older "skip the first render" guard, which only covered the very first
+  // render and left every render between mount and the first snapshot free to
+  // push blank state over the shared board.
   useEffect(() => {
-    if (isInitialMountRef.current) {
-      isInitialMountRef.current = false
-      return
-    }
+    if (!isStateLoaded) return
     if (isRemoteUpdateRef.current) {
       isRemoteUpdateRef.current = false
       return
     }
     saveDispatchState({ roster, dayQueues, daySchedules, lastResetDate })
-  }, [roster, dayQueues, daySchedules, lastResetDate])
+  }, [isStateLoaded, roster, dayQueues, daySchedules, lastResetDate])
 
   // Daily queue reset — empty today's queue once per calendar day. Emptying is
   // idempotent, so two stations open at midnight converge rather than fight.

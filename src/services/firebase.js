@@ -279,6 +279,23 @@ export const subscribeToDispatchState = (onStateReceived, initialDefaults) => {
 let saveTimeout = null
 
 /**
+ * Does this patch look like state that was never loaded, rather than a board
+ * someone deliberately emptied?
+ *
+ * Exported for testing.
+ */
+export const looksUninitialised = (patch) => {
+  if (!patch) return true
+  if (Array.isArray(patch.roster) && patch.roster.length === 0) return true
+  if (
+    patch.dayQueues &&
+    typeof patch.dayQueues === 'object' &&
+    Object.keys(patch.dayQueues).length === 0
+  ) return true
+  return false
+}
+
+/**
  * Save dispatch state to Firestore.
  *
  * There is no local write path: if Firestore is unreachable the change is not
@@ -286,6 +303,20 @@ let saveTimeout = null
  * disconnected, so this should not be reachable in practice.
  */
 export const saveDispatchState = (statePatch) => {
+  // Circuit breaker. An empty roster or a dayQueues map with no keys is what
+  // freshly-mounted state looks like before the first snapshot lands — it is
+  // never a legitimate board, because the admin page refuses to remove the
+  // last administrator and "clear all queues" writes seven empty lists, not
+  // an empty map. Writing it would blank the shared board for every station,
+  // which is exactly what happened on 2026-09-27.
+  if (looksUninitialised(statePatch)) {
+    console.error(
+      'Refusing to save uninitialised state over the shared board.',
+      { roster: statePatch.roster, dayQueues: statePatch.dayQueues }
+    )
+    return Promise.resolve(false)
+  }
+
   if (!currentDb) {
     return Promise.resolve(false)
   }
