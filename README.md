@@ -133,7 +133,9 @@ Firebase is **required**. The app is one shared board, so there is no offline-on
 
 Config comes from build-time env vars (`VITE_FIREBASE_*`) and nothing else; see [`src/services/firebase.js`](./src/services/firebase.js).
 
-> `localStorage` is still used, but only as a **cache**: it carries a station through a brief network drop and seeds the first paint. It is not a mode and never diverges from Firestore for long.
+**There is no local copy of the board.** Firestore is the single source of truth: nothing is seeded from the browser, nothing is written locally, and a station that cannot reach Firestore shows a blocking connection gate rather than stale data. That matters most on the wall display, where a stale queue and a live one look identical.
+
+`localStorage` is used for exactly two per-browser preferences — the chosen turnover chime and the work-ID session — and never for board state.
 
 ### 1. Create the project
 

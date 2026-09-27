@@ -3,6 +3,7 @@ import { Bell } from 'lucide-react'
 import './App.css'
 
 import { AppBar } from './components/AppBar'
+import { ConnectionGate } from './components/ConnectionGate'
 import { SoundModal } from './components/SoundModal'
 import { FullScreenBoard } from './components/FullScreenBoard'
 import { DayScheduleDialog } from './components/DayScheduleDialog'
@@ -38,7 +39,8 @@ function App() {
     dayQueues,
     setDayQueues,
     daySchedules,
-    setDaySchedules
+    setDaySchedules,
+    isStateLoaded
   } = useDispatchData()
 
   // ---- Theme -------------------------------------------------------------
@@ -375,6 +377,33 @@ function App() {
   const queueSummary = activeDay.isWorkDay && queuedPersonnel.length > 0
     ? `${queuedPersonnel.length} in today's queue · ${formatDuration(minutesPerPerson)} each`
     : null
+
+  // Nothing renders until the shared board has loaded. This deliberately
+  // covers full screen too: an unloaded wall display would otherwise show an
+  // empty roster that is indistinguishable from a genuinely empty queue.
+  if (!isStateLoaded) {
+    return (
+      <div className="app-container">
+        <AppBar
+          route={route}
+          onNavigate={navigate}
+          theme={theme}
+          onToggleTheme={() => setTheme(current => (current === 'dark' ? 'light' : 'dark'))}
+          connectionState={connectionState}
+          currentTime={currentTime}
+          session={null}
+          onSignOut={handleSignOut}
+        />
+        <main className="md-main-content">
+          <ConnectionGate
+            status={connectionState.status}
+            error={connectionState.error}
+            onRetry={() => window.location.reload()}
+          />
+        </main>
+      </div>
+    )
+  }
 
   if (isFullScreen) {
     return (

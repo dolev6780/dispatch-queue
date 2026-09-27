@@ -11,13 +11,6 @@ import {
 // Generate a random client session ID to identify the current station/tab
 export const CLIENT_ID = 'client_' + Math.random().toString(36).substring(2, 9)
 
-const LOCAL_ROSTER_KEY = 'dispatch_roster_v1'
-const LOCAL_DAY_QUEUES_KEY = 'dispatch_day_queues_v1'
-const LOCAL_DAY_SCHEDULES_KEY = 'dispatch_day_schedules_v1'
-// Calendar date ("YYYY-MM-DD") of the last automatic daily queue reset.
-// Shared so that whichever station is open first performs the reset and
-// every other station sees it as already done.
-const LOCAL_LAST_RESET_KEY = 'dispatch_last_reset_date_v1'
 
 let currentApp = null
 let currentDb = null
@@ -57,12 +50,13 @@ export const getConnectionState = () => ({ ...connectionState })
  * Resolve Firebase configuration from the build-time environment.
  *
  * Configuration comes from VITE_FIREBASE_* only. There is deliberately no
- * in-app config entry and no offline-only mode: the app is a single shared
- * board, so a station that is not talking to Firestore is misconfigured
- * rather than running in a valid alternative mode.
+ * in-app config entry and no offline mode: the app is a single shared board,
+ * so a station that is not talking to Firestore is broken, not running in a
+ * valid alternative mode.
  *
- * The localStorage cache below is a different thing and is kept — it is what
- * carries a station through a brief network drop, not a mode.
+ * There is no local copy of the board at all. A disconnected station shows
+ * the connection gate instead of stale data, because on a wall display a
+ * stale queue and a live one look exactly the same.
  */
 export const getActiveFirebaseConfig = () => {
   const envConfig = {
@@ -173,60 +167,6 @@ const ensureAnonymousAuth = (app) => {
 }
 
 /**
- * Read cached local state from localStorage with fallbacks
- */
-export const getLocalCachedState = (defaults) => {
-  let roster = defaults?.roster || []
-  let dayQueues = defaults?.dayQueues || {}
-  let daySchedules = defaults?.daySchedules || {}
-  let lastResetDate = defaults?.lastResetDate || null
-
-  try {
-    const savedRoster = localStorage.getItem(LOCAL_ROSTER_KEY)
-    if (savedRoster) roster = JSON.parse(savedRoster)
-  } catch {
-    // Ignore parse error
-  }
-
-  try {
-    const savedQueues = localStorage.getItem(LOCAL_DAY_QUEUES_KEY)
-    if (savedQueues) dayQueues = JSON.parse(savedQueues)
-  } catch {
-    // Ignore parse error
-  }
-
-  try {
-    const savedSchedules = localStorage.getItem(LOCAL_DAY_SCHEDULES_KEY)
-    if (savedSchedules) daySchedules = JSON.parse(savedSchedules)
-  } catch {
-    // Ignore parse error
-  }
-
-  try {
-    const savedReset = localStorage.getItem(LOCAL_LAST_RESET_KEY)
-    if (savedReset) lastResetDate = savedReset
-  } catch {
-    // Ignore read error
-  }
-
-  return { roster, dayQueues, daySchedules, lastResetDate }
-}
-
-/**
- * Persist state to local storage cache
- */
-export const saveLocalCachedState = (state) => {
-  try {
-    if (state.roster) localStorage.setItem(LOCAL_ROSTER_KEY, JSON.stringify(state.roster))
-    if (state.dayQueues) localStorage.setItem(LOCAL_DAY_QUEUES_KEY, JSON.stringify(state.dayQueues))
-    if (state.daySchedules) localStorage.setItem(LOCAL_DAY_SCHEDULES_KEY, JSON.stringify(state.daySchedules))
-    if (state.lastResetDate) localStorage.setItem(LOCAL_LAST_RESET_KEY, state.lastResetDate)
-  } catch (err) {
-    console.warn('Failed to save to local cache:', err)
-  }
-}
-
-/**
  * Subscribe to real-time dispatch state from Cloud Firestore
  */
 export const subscribeToDispatchState = (onStateReceived, initialDefaults) => {
@@ -238,13 +178,9 @@ export const subscribeToDispatchState = (onStateReceived, initialDefaults) => {
   const db = initFirebase()
 
   if (!db) {
-    // Deliver local cached state
-    const local = getLocalCachedState(initialDefaults)
-    onStateReceived({
-      ...local,
-      _isRemote: false,
-      _fromSelf: false
-    })
+    // Firestore is the only source of truth. With no connection there is
+    // nothing to show, so deliver nothing and leave the status reporting the
+    // fault — the UI blocks rather than pretending to work from a local copy.
     return () => {}
   }
 
@@ -273,7 +209,8 @@ export const subscribeToDispatchState = (onStateReceived, initialDefaults) => {
     (snapshot) => {
       if (!snapshot.exists()) {
         // Document does not exist yet in Firestore: auto-seed with local or default state
-        const seedData = getLocalCachedState(initialDefaults)
+        // Seed from the shipped defaults, not from anything stored locally.
+        const seedData = { ...initialDefaults }
         setDoc(stateDocRef, {
           ...seedData,
           updatedBy: CLIENT_ID,
@@ -308,14 +245,6 @@ export const subscribeToDispatchState = (onStateReceived, initialDefaults) => {
         }
         notifyStatusListeners()
 
-        // Sync local storage as backup cache
-        saveLocalCachedState({
-          roster: data.roster,
-          dayQueues: data.dayQueues,
-          daySchedules: data.daySchedules,
-          lastResetDate: data.lastResetDate
-        })
-
         onStateReceived({
           roster: data.roster || initialDefaults.roster,
           dayQueues: data.dayQueues || initialDefaults.dayQueues,
@@ -337,14 +266,9 @@ export const subscribeToDispatchState = (onStateReceived, initialDefaults) => {
       }
       notifyStatusListeners()
 
-      // Fallback to local cache so the user can continue working seamlessly
-      const local = getLocalCachedState(initialDefaults)
-      onStateReceived({
-        ...local,
-        _isRemote: false,
-        _fromSelf: false,
-        _error: err.message
-      })
+      // No local fallback. Showing a stale copy on a wall display is worse
+      // than showing nothing, because stale and live look identical. The UI
+      // blocks on the error status instead.
     }
   )
   }
@@ -355,12 +279,13 @@ export const subscribeToDispatchState = (onStateReceived, initialDefaults) => {
 let saveTimeout = null
 
 /**
- * Save dispatch state remotely to Firestore and locally as fallback
+ * Save dispatch state to Firestore.
+ *
+ * There is no local write path: if Firestore is unreachable the change is not
+ * saved anywhere, and the caller is told so. The UI blocks editing while
+ * disconnected, so this should not be reachable in practice.
  */
 export const saveDispatchState = (statePatch) => {
-  // Always update local cache immediately for zero latency
-  saveLocalCachedState(statePatch)
-
   if (!currentDb) {
     return Promise.resolve(false)
   }

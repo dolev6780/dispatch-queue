@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   subscribeToDispatchState,
-  saveDispatchState,
-  getLocalCachedState
+  saveDispatchState
 } from '../services/firebase'
 import { toDateKey, resolveDailyReset } from '../services/dailyReset'
 import { DEFAULT_DAY_SCHEDULES } from '../services/schedule'
@@ -43,16 +42,17 @@ const SYNC_DEFAULTS = {
 export const useDispatchData = () => {
   const [currentTime, setCurrentTime] = useState(() => new Date())
 
-  const cachedInitial = useMemo(() => getLocalCachedState(SYNC_DEFAULTS), [])
+  // Empty until Firestore answers. Nothing is seeded from this browser —
+  // the shared document is the single source of truth, so the app shows a
+  // loading state rather than a local guess at what the board contains.
+  const [roster, setRoster] = useState([])
+  const [dayQueues, setDayQueues] = useState({})
+  const [daySchedules, setDaySchedules] = useState(DEFAULT_DAY_SCHEDULES)
+  const [lastResetDate, setLastResetDate] = useState(null)
 
-  const [roster, setRoster] = useState(cachedInitial.roster)
-  const [dayQueues, setDayQueues] = useState(cachedInitial.dayQueues)
-  const [daySchedules, setDaySchedules] = useState(cachedInitial.daySchedules)
-  const [lastResetDate, setLastResetDate] = useState(cachedInitial.lastResetDate)
-
-  // True once the first state (remote or cached) has arrived. The daily reset
-  // waits on this so a station opening mid-morning cannot clear a queue
-  // another station already built for today.
+  // True once the first snapshot has arrived. The daily reset waits on this
+  // so a station opening mid-morning cannot clear a queue another station
+  // already built for today.
   const [isStateLoaded, setIsStateLoaded] = useState(false)
 
   const isRemoteUpdateRef = useRef(false)
