@@ -98,7 +98,7 @@ rules-tests/
 ```
 
 ```bash
-npm test             # 268 assertions on the pure logic, no browser or network
+npm test             # 296 assertions on the pure logic, no browser or network
 npm run test:rules   # 196 security-rule cases in the local Firestore emulator (needs Java)
 ```
 
@@ -187,11 +187,13 @@ A process can be **linked to one job type**. From then on, every new job of that
 
 [`tools/servicenow-watcher.user.js`](./tools/servicenow-watcher.user.js) is a small browser script, separate from the app, that tells you when a **new unassigned task** reaches your group in ServiceNow — a chime plus a desktop notification with the task number, short description, priority and group. Clicking the notification opens the task.
 
-**Nothing leaves the browser.** It reads ServiceNow with the login already open in that browser, only reads, and sends nothing to Firebase or anywhere else. All it keeps, in that browser, is your settings and the ids of tasks it has already announced (so a reload does not repeat them).
+**Nothing leaves the browser.** It reads ServiceNow with the login already open in that browser, only reads, and sends nothing to Firebase or anywhere else. All it keeps, in that browser, is your settings, the ids of tasks it has already announced (so a reload does not repeat them), and the latest list of unassigned tasks for the NBLAB page (below).
+
+**On the NBLAB website, on the same PC.** The script also runs on the NBLAB site, where it hands the latest unassigned tasks — number, short description, priority, time — to the page: a *ServiceNow* strip on the Queue page and a row on the wall display, each task linking back to ServiceNow. The hand-over goes through Tampermonkey's own storage in that browser, never through Firebase, so other stations do not see it. The page keeps the tasks in memory only and accepts nothing but plain text and `https` links from the script (`src/services/servicenow.js`). If the ServiceNow tab is closed, the strip says the watcher is paused after three minutes.
 
 **Install**
 
-1. Install the **Tampermonkey** extension in Edge or Chrome (if Intel IT allows it). In recent browsers, also turn on *Allow user scripts* in the extension's details.
+1. Install the **Tampermonkey** extension in Edge or Chrome (if Intel IT allows it). In the extension's details, turn on *Allow user scripts* (Chrome) or *Developer mode* (Edge), and set *Site access* to *On all sites*. If ServiceNow still says Tampermonkey has no access, Intel's policy blocks extensions there (`edge://policy` → `runtime_blocked_hosts`).
 2. On the app's Home page, press **Install** under *Tools for the lab PC* (or open <https://dolev6780.github.io/dispatch-queue/servicenow-watcher.user.js>), then **Install** in Tampermonkey. The site publishes the script next to the app (see `vite.config.js`), and Tampermonkey checks it there for updates, so fixes reach the lab PC by themselves.
 3. If your ServiceNow address does not end in `service-now.com`, add a `// @match https://<your address>/*` line to the header.
 4. Open ServiceNow. A small badge appears bottom-left: click it and enter your **assignment group(s)** exactly as named in ServiceNow, and `sc_task` (catalog tasks) or `incident`.

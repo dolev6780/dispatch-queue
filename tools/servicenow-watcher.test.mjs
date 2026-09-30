@@ -7,7 +7,7 @@ const source = readFileSync(new URL('./servicenow-watcher.user.js', import.meta.
 const context = { URLSearchParams }
 vm.createContext(context)
 vm.runInContext(source, context)
-const { unassignedQuery, tableUrl, recordUrl, listUrl, findNew, describe, summarize, parseGroups, testMessage } = context.nblabWatcher
+const { unassignedQuery, tableUrl, recordUrl, listUrl, findNew, describe, summarize, parseGroups, testMessage, snapshotOf, failedSnapshot } = context.nblabWatcher
 
 let pass = 0
 let fail = 0
@@ -60,6 +60,23 @@ eq('shows the newest waiting task', testMessage([{ ...task, sys_id: 't12' }, { n
   { title: 'Test · SCTASK0012 (newest waiting)', text: 'Laptop swap, room 204\n3 - Moderate', taskId: 't12' })
 eq('all clear when nothing is waiting', testMessage([], ['NBLAB Support', 'NBLAB AV'], []),
   { title: 'Watcher test · working', text: 'Nothing unassigned in NBLAB Support, NBLAB AV right now.', taskId: null })
+
+console.log('--- hand-over to the NBLAB page ---')
+const many = Array.from({ length: 25 }, (_, i) => ({
+  sys_id: `s${i}`, number: `SCTASK${i}`, short_description: `Task ${i}`, priority: '3 - Moderate', sys_created_on: '2026-09-30 10:41:05', assignment_group: 'G'
+}))
+const snap = snapshotOf({ tasks: many, table: 'sc_task', groups: ['G'], origin: 'https://x.service-now.com', now: 1000 })
+eq('counts every waiting task', snap.count, 25)
+eq('passes on at most 20', snap.tasks.length, 20)
+eq('only the fields the page shows, with a link back', snap.tasks[0], {
+  id: 's0', number: 'SCTASK0', title: 'Task 0', priority: '3 - Moderate', opened: '2026-09-30 10:41:05',
+  url: 'https://x.service-now.com/nav_to.do?uri=sc_task.do%3Fsys_id%3Ds0'
+})
+eq('checked and ok at the same time, no error', [snap.checkedAt, snap.okAt, snap.error], [1000, 1000, null])
+const failed = failedSnapshot(snap, { groups: ['G'], error: 'Cannot reach ServiceNow', now: 5000 })
+eq('a failure keeps the last good list', [failed.count, failed.tasks.length], [25, 20])
+eq('...and says when it last worked', [failed.checkedAt, failed.okAt, failed.error], [5000, 1000, 'Cannot reach ServiceNow'])
+eq('a failure before any success', failedSnapshot(null, { groups: [], error: 'x', now: 1 }).tasks, [])
 
 console.log('--- settings ---')
 eq('groups split on commas, semicolons or lines', parseGroups(' NBLAB Support ;NBLAB AV,\n  '), ['NBLAB Support', 'NBLAB AV'])

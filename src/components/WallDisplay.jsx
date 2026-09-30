@@ -1,5 +1,6 @@
 import { Bell, BellOff, Minimize2 } from 'lucide-react'
 import { JobChip, StatusBadge } from './ui'
+import { ServiceNowStrip } from './ServiceNowStrip'
 import { StaleBanner } from './StaleBanner'
 import { formatClockHM, formatHM, formatLongDate } from '../services/format'
 import { checklistOf, jobTypeOf, waitingFor } from '../services/jobs'
@@ -74,6 +75,7 @@ export const WallDisplay = ({
   schedule,
   nowMinutes,
   jobs,
+  serviceNow,
   soundEnabled,
   onToggleSound,
   onExit,
@@ -149,6 +151,7 @@ export const WallDisplay = ({
           </ul>
         </footer>
       )}
+      <ServiceNowStrip snapshot={serviceNow} now={currentTime} variant="wall" limit={4} />
     </div>
   )
 }

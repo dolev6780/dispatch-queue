@@ -37,6 +37,7 @@
   --blue-text: #1d4fd6;
   --blue-soft: #e3ebfd;
   --blue-line: #bfd0f8;
+  --blue-tint: #f2f6fe;
   --green: #16a34a;
   --green-text: #147a3b;
   --green-soft: #dbf1e2;
@@ -97,6 +98,7 @@
   --blue-text: #86a8ff;
   --blue-soft: rgba(37, 99, 235, 0.2);
   --blue-line: rgba(96, 140, 255, 0.4);
+  --blue-tint: rgba(37, 99, 235, 0.08);
   --green-text: #5ad487;
   --green-soft: rgba(22, 163, 74, 0.2);
   --red-text: #fb7f7f;

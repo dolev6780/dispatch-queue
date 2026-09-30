@@ -75,13 +75,14 @@ export const HomePage = ({
         <div className="tool-text">
           <span className="module-name">ServiceNow watcher</span>
           <span className="module-desc">
-            A chime and a desktop notification on this PC when a new unassigned task reaches your group.
-            It uses your own ServiceNow login and only reads — nothing goes into this app.
+            A chime and a desktop notification on this PC when a new unassigned task reaches your group, and the
+            waiting tasks on this PC's Queue page and wall display. It uses your own ServiceNow login and only
+            reads; the tasks stay in this browser and never go into the app's database.
           </span>
           <ol className="tool-steps">
-            <li>Add the <strong>Tampermonkey</strong> extension to Edge or Chrome, and turn on <em>Allow user scripts</em> in its details.</li>
+            <li>Add the <strong>Tampermonkey</strong> extension to Edge or Chrome, turn on <em>Allow user scripts</em>, and set its <em>Site access</em> to <em>On all sites</em>.</li>
             <li>Press <strong>Install</strong> here, then <strong>Install</strong> again in Tampermonkey.</li>
-            <li>Open ServiceNow, click the badge at the bottom-left, enter your group, and press <strong>Test</strong>.</li>
+            <li>Open ServiceNow, click the badge at the bottom-left, enter your group, and press <strong>Test</strong>. Keep that ServiceNow tab open.</li>
           </ol>
           <span className="tool-note">Updates install by themselves. Without Tampermonkey, Install just shows the script.</span>
         </div>

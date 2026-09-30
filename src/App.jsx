@@ -9,6 +9,7 @@ import { HoursDialog } from './components/HoursDialog'
 import { JobDialog } from './components/JobDialog'
 import { JobsStrip } from './components/JobsStrip'
 import { JobChecklistDialog } from './components/JobChecklistDialog'
+import { ServiceNowStrip } from './components/ServiceNowStrip'
 import { Toast } from './components/Toast'
 import { HomePage } from './pages/HomePage'
 import { QueuePage } from './pages/QueuePage'
@@ -22,6 +23,7 @@ import { useAuth } from './hooks/useAuth'
 import { useDispatchQueue } from './hooks/useDispatchQueue'
 import { useJobs } from './hooks/useJobs'
 import { useProcesses } from './hooks/useProcesses'
+import { useServiceNowBridge } from './hooks/useServiceNowBridge'
 import { useIsNarrow } from './hooks/useMediaQuery'
 import { playShiftSound } from './services/soundEffects'
 import { isFirebaseConfigured } from './services/firebase'
@@ -306,6 +308,9 @@ function App() {
   // A job of a type with a process carries its steps; the checklist dialog
   // follows the live job, so ticks from another station show up here too.
   const workProcesses = useProcesses({ siteId: activeSiteId, canRead: canUse })
+
+  // Unassigned ServiceNow tasks, only on a PC running the watcher script.
+  const serviceNow = useServiceNowBridge()
   const [checklistJobId, setChecklistJobId] = useState(null)
   const checklistJob = jobs.openJobs.find(job => job.id === checklistJobId) || null
 
@@ -449,6 +454,7 @@ function App() {
         schedule={todaySchedule}
         nowMinutes={nowMinutes}
         jobs={jobs.openJobs}
+        serviceNow={serviceNow}
         soundEnabled={soundEnabled}
         onToggleSound={toggleSound}
         onExit={exitWall}
@@ -589,6 +595,7 @@ function App() {
           onEnableNotifications={enableDesktopAlerts}
         />
       )}
+      {route === 'queue' && <ServiceNowStrip snapshot={serviceNow} now={currentTime} limit={isNarrow ? 3 : 6} />}
 
       <main className="main">
         {errors.map(error => (

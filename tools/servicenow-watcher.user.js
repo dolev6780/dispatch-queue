@@ -1,19 +1,24 @@
 // ==UserScript==
 // @name         NBLAB · ServiceNow unassigned-task watcher
 // @namespace    nblab
-// @version      1.2.0
+// @version      1.3.0
 // @description  Chime and desktop notification when a new unassigned task reaches your group. Uses your own ServiceNow login; nothing leaves this browser.
 // @homepageURL  https://dolev6780.github.io/dispatch-queue/
 // @downloadURL  https://dolev6780.github.io/dispatch-queue/servicenow-watcher.user.js
 // @updateURL    https://dolev6780.github.io/dispatch-queue/servicenow-watcher.user.js
 // @match        https://*.service-now.com/*
+// @match        https://dolev6780.github.io/dispatch-queue/*
+// @match        http://localhost:*/*
 // @noframes
 // @run-at       document-idle
 // @grant        GM_notification
+// @grant        GM_setValue
+// @grant        GM_getValue
+// @grant        GM_addValueChangeListener
 // @grant        unsafeWindow
 // ==/UserScript==
 
-/* global GM_notification, unsafeWindow */
+/* global GM_notification, GM_setValue, GM_getValue, GM_addValueChangeListener, unsafeWindow */
 
 /*
  * How it works
@@ -34,6 +39,16 @@
  * The badge's Test button checks ServiceNow right away and shows a real
  * notification for the newest waiting task (or says nothing is waiting), so
  * the whole chain — access, notifications, sound — can be checked on the spot.
+ *
+ * On the NBLAB website
+ * --------------------
+ * The same script also runs on the NBLAB site, where it does one thing: it
+ * hands the latest unassigned tasks (number, short description, priority,
+ * time) to the page, which shows them on the Queue page and the wall display.
+ * The hand-over goes through Tampermonkey's own storage on this PC — never
+ * through Firebase or any server — so it only works in this browser, and only
+ * while a ServiceNow tab here is open and watching. On any other page on
+ * localhost it does nothing.
  */
 
 const DEFAULTS = {
@@ -52,6 +67,9 @@ const DEFAULTS = {
 
 const MIN_SECONDS = 30
 const MAX_SINGLE_NOTIFICATIONS = 4
+const SNAPSHOT_KEY = 'nblab.sn.snapshot.v1'
+const SNAPSHOT_TASKS = 20
+const BRIDGE_SOURCE = 'nblab-servicenow-watcher'
 
 // ---- Pure helpers (tested in tools/servicenow-watcher.test.mjs) -------------
 
@@ -114,6 +132,40 @@ const testMessage = (tasks, groups, details) => {
   return { title: `Test · ${title.replace('New unassigned task · ', '')} (newest waiting)`, text, taskId: newest.sys_id }
 }
 
+/**
+ * What the NBLAB page is given after a successful check: the few fields it
+ * shows, links back to ServiceNow, and when it was checked.
+ */
+const snapshotOf = ({ tasks, table, groups, origin, now }) => ({
+  version: 1,
+  groups,
+  count: tasks.length,
+  tasks: tasks.slice(0, SNAPSHOT_TASKS).map(task => ({
+    id: task.sys_id,
+    number: task.number || '',
+    title: task.short_description || '',
+    priority: task.priority || '',
+    opened: task.sys_created_on || '',
+    url: origin + recordUrl(table, task.sys_id)
+  })),
+  listUrl: origin + listUrl(table, groups),
+  checkedAt: now,
+  okAt: now,
+  error: null
+})
+
+/** After a failed check: keep the last good list, say what went wrong. */
+const failedSnapshot = (previous, { groups, error, now }) => ({
+  version: 1,
+  groups,
+  count: previous?.count || 0,
+  tasks: previous?.tasks || [],
+  listUrl: previous?.listUrl || null,
+  checkedAt: now,
+  okAt: previous?.okAt || 0,
+  error
+})
+
 /** Parse the groups typed into the settings prompt. */
 const parseGroups = (text) =>
   String(text || '').split(/[,;\n]/).map(name => name.trim()).filter(Boolean)
@@ -138,6 +190,19 @@ const main = () => {
 
   let settings = { ...DEFAULTS, ...read(SETTINGS_KEY, {}) }
   const knownKey = () => `nblab.snWatcher.known.v1.${settings.table}.${settings.groups.join('|')}`
+
+  // For the NBLAB page on this PC (see "On the NBLAB website" above).
+  const canPublish = typeof GM_setValue === 'function' && typeof GM_getValue === 'function'
+  const publish = (tasks) => {
+    if (!canPublish) return
+    GM_setValue(SNAPSHOT_KEY, snapshotOf({
+      tasks, table: settings.table, groups: settings.groups, origin: page.location.origin, now: Date.now()
+    }))
+  }
+  const publishFailure = (error) => {
+    if (!canPublish) return
+    GM_setValue(SNAPSHOT_KEY, failedSnapshot(GM_getValue(SNAPSHOT_KEY, null), { groups: settings.groups, error, now: Date.now() }))
+  }
 
   // ---- Badge -----------------------------------------------------------------
   const badge = document.createElement('div')
@@ -262,8 +327,10 @@ const main = () => {
     if (err?.status === 401 || err?.status === 403) {
       show('Watcher: not allowed — reload ServiceNow', '#f87171',
         `ServiceNow answered ${err.status}. Reload the page if you were signed out; if it persists, your account may not be allowed to use the API.`)
+      publishFailure('ServiceNow refused the watcher — reload ServiceNow')
     } else {
       show('Watcher: cannot reach ServiceNow', '#f87171', String(err?.message || err))
+      publishFailure('The watcher cannot reach ServiceNow')
     }
   }
 
@@ -280,10 +347,12 @@ const main = () => {
   async function check() {
     if (!settings.groups.length) {
       show('Watcher: click to choose your group', '#fbbf24')
+      publishFailure('Choose your group on the watcher badge in ServiceNow')
       return
     }
     try {
       const tasks = await fetchTasks()
+      publish(tasks)
       const stored = read(knownKey(), null)
       const { fresh, known } = findNew(stored, tasks)
       write(knownKey(), known)
@@ -317,6 +386,7 @@ const main = () => {
     show('Testing…', '#75756f')
     try {
       const tasks = await fetchTasks()
+      publish(tasks)
       const message = testMessage(tasks, settings.groups, settings.details)
       notify(message, message.taskId ? recordUrl(settings.table, message.taskId) : listUrl(settings.table, settings.groups))
       chime()
@@ -347,9 +417,41 @@ const main = () => {
   }
 }
 
+// ---- On the NBLAB website: hand the tasks to the page ---------------------------
+
+const bridge = () => {
+  const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window
+  const origin = page.location.origin
+  const post = (snapshot) => {
+    if (snapshot) page.postMessage({ source: BRIDGE_SOURCE, snapshot }, origin)
+  }
+  post(GM_getValue(SNAPSHOT_KEY, null))
+  // Every check in the ServiceNow tab rewrites the snapshot, so this fires
+  // about once a minute — which is also how the page knows the watcher is
+  // still running.
+  GM_addValueChangeListener(SNAPSHOT_KEY, (_name, _old, value) => post(value))
+  // The page asks when it starts, in case it started after this script.
+  page.addEventListener('message', (event) => {
+    if (event.origin === origin && event.data?.source === 'nblab-app' && event.data.type === 'servicenow:hello') {
+      post(GM_getValue(SNAPSHOT_KEY, null))
+    }
+  })
+}
+
+// The NBLAB app marks its page with <meta name="nblab-app">. Every other page
+// this script is allowed on is ServiceNow — except stray localhost pages and
+// the NBLAB site's other files, where it stays out of the way.
+const isNblabSite = () => !!document.querySelector('meta[name="nblab-app"]')
+const isNotServiceNow = () => /^(localhost|127\.0\.0\.1|dolev6780\.github\.io)$/.test(location.hostname)
+
 if (typeof window === 'undefined') {
   // Loaded by the tests, not a browser.
-  globalThis.nblabWatcher = { unassignedQuery, tableUrl, recordUrl, listUrl, findNew, describe, summarize, parseGroups, testMessage }
-} else {
+  globalThis.nblabWatcher = {
+    unassignedQuery, tableUrl, recordUrl, listUrl, findNew, describe, summarize, parseGroups, testMessage,
+    snapshotOf, failedSnapshot
+  }
+} else if (isNblabSite()) {
+  if (typeof GM_getValue === 'function') bridge()
+} else if (!isNotServiceNow()) {
   main()
 }
