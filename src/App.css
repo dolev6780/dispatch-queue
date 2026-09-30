@@ -912,6 +912,16 @@ button.module:hover { border-color: var(--ink); box-shadow: var(--shadow-sm); tr
   color: var(--ink-2);
 }
 .tool-note { font-size: 12.5px; color: var(--ink-3); }
+.tool-text code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-sunk);
+  border: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink);
+}
+.tools .tool-card + .tool-card { margin-top: 4px; }
 .tool-status {
   display: flex;
   align-items: flex-start;

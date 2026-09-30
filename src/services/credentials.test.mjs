@@ -64,5 +64,15 @@ const distinctInputs = new Set(many.map(normaliseWwid))
 eq('distinct WWIDs give distinct emails',
   new Set(emails.filter(Boolean)).size, distinctInputs.size)
 
+// Pages served over plain http (the main PC's relay) have no crypto.subtle.
+{
+  const subtleValues = await Promise.all(['4471', 'A12', 'wwid.with-dots_1'].map(wwidToPassword))
+  const saved = Object.getOwnPropertyDescriptor(globalThis, 'crypto')
+  Object.defineProperty(globalThis, 'crypto', { value: undefined, configurable: true })
+  const fallbackValues = await Promise.all(['4471', 'A12', 'wwid.with-dots_1'].map(wwidToPassword))
+  Object.defineProperty(globalThis, 'crypto', saved)
+  eq('without crypto.subtle the password is identical', fallbackValues, subtleValues)
+}
+
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

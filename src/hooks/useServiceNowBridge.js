@@ -11,13 +11,13 @@ import { APP_SOURCE, readWatcherMessage } from '../services/servicenow'
  * without the watcher, `present` stays false and nothing is shown.
  */
 export const useServiceNowBridge = () => {
-  const [bridge, setBridge] = useState({ present: false, version: '', snapshot: null })
+  const [bridge, setBridge] = useState({ present: false, via: 'bridge', version: '', snapshot: null })
 
   useEffect(() => {
     const onMessage = (event) => {
       if (event.origin !== window.location.origin) return
       const message = readWatcherMessage(event.data)
-      if (message) setBridge({ present: true, ...message })
+      if (message) setBridge({ present: true, via: 'bridge', ...message })
     }
     window.addEventListener('message', onMessage)
     // In case the watcher started first: ask for what it has.

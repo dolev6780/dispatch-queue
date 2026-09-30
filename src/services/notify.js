@@ -9,8 +9,10 @@
  * screen until dismissed, and is closed automatically once the job is done.
  */
 
+// Browsers only grant notifications to https pages (and localhost). On the
+// main PC's plain-http relay they are simply unavailable.
 export const notificationsSupported = () =>
-  typeof window !== 'undefined' && 'Notification' in window
+  typeof window !== 'undefined' && 'Notification' in window && window.isSecureContext !== false
 
 /** 'granted' | 'denied' | 'default' | 'unsupported' */
 export const notificationPermission = () =>

@@ -93,12 +93,13 @@ src/
     soundEffects.js        Web Audio turnover chimes
 tools/
   servicenow-watcher.user.js  lab-PC browser script: notifies on new unassigned ServiceNow tasks (tested)
+  servicenow-relay.mjs        main-PC server: shares the unassigned list with the other lab PCs, in memory (tested)
 rules-tests/
   rules.test.mjs           196-case security-rules suite, run in the Firestore emulator
 ```
 
 ```bash
-npm test             # 296 assertions on the pure logic, no browser or network
+npm test             # 353 assertions on the pure logic, no browser or network
 npm run test:rules   # 196 security-rule cases in the local Firestore emulator (needs Java)
 ```
 
@@ -200,6 +201,23 @@ A process can be **linked to one job type**. From then on, every new job of that
 5. Press **Test** on the badge. It checks ServiceNow right away and shows a real notification for the newest waiting task (or says nothing is waiting), with the chime — so access, notifications and sound are all checked in one click. The badge says *Test OK*, or what is wrong.
 
 The badge shows how many unassigned tasks are waiting and when it last checked; clicking it opens that list, ⚙ changes the settings. It checks once a minute. With several ServiceNow tabs open, only one watches. The first check only takes note of tasks already waiting — it announces what arrives after that. If ServiceNow refuses the request (the badge turns red), you were signed out, or your account is not allowed to use ServiceNow's API.
+
+### On every lab PC: the relay
+
+Only one PC needs to watch ServiceNow. [`tools/servicenow-relay.mjs`](./tools/servicenow-relay.mjs) is a small server for that **main PC** that shares its unassigned list with the other lab PCs — still without Firebase:
+
+```
+node servicenow-relay.mjs                 # port 8787; leave the window open
+node servicenow-relay.mjs --site l12      # only people working at site l12 may read
+```
+
+- **In memory only.** The watcher on the main PC hands each check to the relay at `http://127.0.0.1:8787`. The relay keeps the latest list in memory — nothing on disk, nothing in Firebase — and it is gone when the window closes. Updates are accepted from the main PC itself only.
+- **The other PCs open the app from the main PC** — `http://MAIN-PC:8787/` (the relay prints its addresses) — instead of the GitHub Pages address. The relay serves the live NBLAB app, and the app finds the relay on its own and polls it every 15 seconds. This detour exists because browsers do not let an https page read a plain-http server on another PC.
+- **Only NBLAB users can read it.** Each request carries the user's Firebase sign-in token; the relay checks its signature against Google's keys, the project, the expiry, and that the person has an NBLAB profile (read with their own token, as the Firestore rules allow). Anyone else on the network gets nothing.
+- **Plain http has two side effects,** handled in the app: the browser's `crypto.subtle` is missing there, so sign-in hashing falls back to a JS SHA-256 (`@noble/hashes`, same result — tested), and desktop notifications are unavailable (browsers allow them only on https).
+- **Firewall:** the other PCs can only reach the relay if the main PC's firewall allows incoming connections on port 8787. On a managed PC that may need IT.
+
+The Home page's *Tools for the lab PC* section has the download and these steps, and its status line says whether this PC gets the list from the watcher in this browser or from the main PC.
 
 ## Firebase 🔥
 

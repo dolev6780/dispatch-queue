@@ -40,6 +40,7 @@ eq('not installed here', bridgeStatus({ present: false, snapshot: null }, 0), 'm
 eq('installed, waiting for ServiceNow', bridgeStatus({ present: true, snapshot: null }, 0), 'waiting')
 eq('installed and reporting', bridgeStatus({ present: true, snapshot: good }, 2000), 'live')
 eq('installed but gone quiet', bridgeStatus({ present: true, snapshot: good }, 1000 + STALE_AFTER_MS + 1), 'stale')
+eq('the relay refused this sign-in', bridgeStatus({ present: true, denied: true, snapshot: good }, 2000), 'denied')
 
 console.log('--- live, error, stale ---')
 eq('fresh and fine', snapshotState(good, 1000 + 60000), 'live')

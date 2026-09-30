@@ -14,6 +14,9 @@ export const APP_SOURCE = 'nblab-app'
 /** No news from the watcher for this long means its ServiceNow tab is closed. */
 export const STALE_AFTER_MS = 3 * 60 * 1000
 
+/** How often a PC using the main PC's relay asks it for the list. */
+export const RELAY_POLL_MS = 15 * 1000
+
 const text = (value, max) => String(value ?? '').slice(0, max)
 
 const httpsUrl = (value) => {
@@ -70,13 +73,16 @@ export const snapshotState = (snapshot, nowMs) => {
 }
 
 /**
- * One line on how the watcher is doing in this browser, for the Home page:
- * missing — not running here (not installed, not updated, or not allowed on this site)
- * waiting — running here, but no ServiceNow tab has reported yet
+ * Where the ServiceNow list stands on this PC — from the watcher in this
+ * browser (via 'bridge') or from the main PC's relay (via 'relay'):
+ * missing — neither is here
+ * denied  — the relay did not accept this sign-in
+ * waiting — connected, but no ServiceNow tab has reported yet
  * live / error / stale — as snapshotState
  */
 export const bridgeStatus = (bridge, nowMs) => {
   if (!bridge?.present) return 'missing'
+  if (bridge.denied) return 'denied'
   if (!bridge.snapshot) return 'waiting'
   return snapshotState(bridge.snapshot, nowMs)
 }

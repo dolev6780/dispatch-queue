@@ -2,12 +2,20 @@ import { ExternalLink } from 'lucide-react'
 import { formatClockHM } from '../services/format'
 import { bridgeStatus, isUrgent, openedTime } from '../services/servicenow'
 
-const WAITING = 'Waiting for ServiceNow — open it in this browser (reload it after an update) and press Test on its badge'
-
-const headline = (snapshot, state) => {
-  if (state === 'waiting') return WAITING
+const headline = (snapshot, state, via) => {
+  const onMainPc = via === 'relay'
+  if (state === 'waiting') {
+    return onMainPc
+      ? 'Waiting for the main PC — its ServiceNow tab has not reported yet'
+      : 'Waiting for ServiceNow — open it in this browser (reload it after an update) and press Test on its badge'
+  }
+  if (state === 'denied') return 'The main PC did not accept your sign-in — sign out and in again'
   const asOf = formatClockHM(snapshot.okAt || snapshot.checkedAt)
-  if (state === 'stale') return `Watcher paused — open ServiceNow in this browser · last seen ${asOf}`
+  if (state === 'stale') {
+    return onMainPc
+      ? `Paused — the main PC's ServiceNow tab has stopped reporting · last seen ${asOf}`
+      : `Watcher paused — open ServiceNow in this browser · last seen ${asOf}`
+  }
   if (state === 'error') return snapshot.error
   if (snapshot.count === 0) return `Nothing unassigned · ${asOf}`
   return `${snapshot.count} unassigned · ${asOf}`
@@ -45,7 +53,7 @@ export const ServiceNowStrip = ({ bridge, now, variant = 'band', limit = 6 }) =>
             {more > 0 && <li className="wall-sn-more">+{more} more</li>}
           </ul>
         ) : (
-          <span className="wall-sn-note">{headline(snapshot, state)}</span>
+          <span className="wall-sn-note">{headline(snapshot, state, bridge.via)}</span>
         )}
       </section>
     )
@@ -56,7 +64,7 @@ export const ServiceNowStrip = ({ bridge, now, variant = 'band', limit = 6 }) =>
       <div className="sn-band-inner">
         <div className="sn-band-head">
           <span className="sn-label">ServiceNow</span>
-          <span className="sn-headline">{headline(snapshot, state)}</span>
+          <span className="sn-headline">{headline(snapshot, state, bridge.via)}</span>
           {snapshot.groups.length > 0 && <span className="sn-groups">{snapshot.groups.join(', ')}</span>}
           {snapshot.listUrl && (
             <a className="btn btn-sm btn-ghost" href={snapshot.listUrl} target="_blank" rel="noopener noreferrer">

@@ -1,4 +1,4 @@
-import { ArrowRight, BellRing, BookOpen, Download, ListOrdered, Plane } from 'lucide-react'
+import { ArrowRight, BellRing, BookOpen, Download, ListOrdered, Network, Plane } from 'lucide-react'
 import { OnDutyCard } from '../components/OnDutyCard'
 import { Eyebrow } from '../components/ui'
 import { FEATURES } from '../services/features'
@@ -10,12 +10,27 @@ const ICONS = { list: ListOrdered, book: BookOpen }
 // Published next to the app by vite.config.js. Opening a .user.js address is
 // what makes Tampermonkey offer to install it.
 const WATCHER_URL = `${import.meta.env.BASE_URL}servicenow-watcher.user.js`
+const RELAY_URL = `${import.meta.env.BASE_URL}servicenow-relay.mjs`
 
 /** Where the watcher stands in THIS browser, in words. */
 const watcherLine = (bridge, now) => {
   const state = bridgeStatus(bridge, now.getTime())
   const version = bridge?.version ? ` (version ${bridge.version})` : ''
   const snapshot = bridge?.snapshot
+  if (bridge?.via === 'relay' && state !== 'missing') {
+    switch (state) {
+      case 'denied':
+        return { tone: 'bad', text: 'Opened from the main PC, but it did not accept your sign-in. Sign out and in again.' }
+      case 'waiting':
+        return { tone: 'wait', text: 'Opened from the main PC. Waiting for its ServiceNow tab: on the main PC, open ServiceNow and press Test on the watcher badge.' }
+      case 'stale':
+        return { tone: 'wait', text: `Opened from the main PC, but its ServiceNow tab has not reported since ${formatClockHM(snapshot.checkedAt)}.` }
+      case 'error':
+        return { tone: 'bad', text: `Opened from the main PC. ${snapshot.error}.` }
+      default:
+        return { tone: 'ok', text: `Shared from the main PC: ${snapshot.count} unassigned in ${snapshot.groups.join(', ')}, checked ${formatClockHM(snapshot.checkedAt)}. They show on the Queue page and the wall display.` }
+    }
+  }
   switch (state) {
     case 'missing':
       return { tone: 'off', text: 'Not running in this browser. Install or update it, and let Tampermonkey run on this site (Site access: On all sites).' }
@@ -112,6 +127,30 @@ export const HomePage = ({
           </div>
           <a className="btn btn-dark tool-install" href={WATCHER_URL} target="_blank" rel="noopener noreferrer">
             <Download size={16} /><span>Install</span>
+          </a>
+        </div>
+
+        <div className="tool-card">
+          <span className="module-icon"><Network size={20} /></span>
+          <div className="tool-text">
+            <span className="module-name">Show ServiceNow on every lab PC</span>
+            <span className="module-desc">
+              A small server on the main PC (the one running the watcher) shares its unassigned list with the
+              other lab PCs. It keeps the list in memory only — nothing on disk, nothing in Firebase — and shows
+              it only to people signed in to NBLAB.
+            </span>
+            <ol className="tool-steps">
+              <li>On the main PC, install <strong>Node.js</strong> (the LTS version from nodejs.org) if it is not there yet.</li>
+              <li>Press <strong>Download relay</strong>, open a terminal in the download folder, and run <code>node servicenow-relay.mjs</code>. Leave that window open.</li>
+              <li>On every other lab PC, open the address it prints — like <code>http://MAIN-PC:8787</code> — instead of this website, and sign in as usual.</li>
+            </ol>
+            <span className="tool-note">
+              If the other PCs cannot open that address, the main PC&apos;s firewall blocks port 8787 — IT has to allow it.
+              Desktop alerts do not work on that address (browsers allow them only on https); everything else does.
+            </span>
+          </div>
+          <a className="btn btn-outline tool-install" href={RELAY_URL} download="servicenow-relay.mjs">
+            <Download size={16} /><span>Download relay</span>
           </a>
         </div>
       </section>

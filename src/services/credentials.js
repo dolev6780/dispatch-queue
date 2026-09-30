@@ -17,6 +17,8 @@
  *   - admin rights live in Firestore and are checked by rules, not the UI
  */
 
+import { sha256 } from '@noble/hashes/sha2.js'
+
 /** The email domain is internal and never receives mail. */
 export const EMAIL_DOMAIN = 'nblab.local'
 
@@ -42,8 +44,14 @@ export const wwidToPassword = async (wwid) => {
   const normalised = normaliseWwid(wwid)
   if (!normalised) return null
   const bytes = new TextEncoder().encode(`nblab-dispatch-credential:${normalised}`)
-  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes)
-  return Array.from(new Uint8Array(digest))
+  // The browser's crypto.subtle exists only on https pages and localhost.
+  // The app is also served over plain http by the main PC's relay
+  // (tools/servicenow-relay.mjs), so fall back to a JS SHA-256 there —
+  // same algorithm, same result.
+  const digest = globalThis.crypto?.subtle
+    ? new Uint8Array(await globalThis.crypto.subtle.digest('SHA-256', bytes))
+    : sha256(bytes)
+  return Array.from(digest)
     .map(byte => byte.toString(16).padStart(2, '0'))
     .join('')
     .slice(0, 32)

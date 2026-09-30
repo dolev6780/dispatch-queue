@@ -24,6 +24,7 @@ import { useDispatchQueue } from './hooks/useDispatchQueue'
 import { useJobs } from './hooks/useJobs'
 import { useProcesses } from './hooks/useProcesses'
 import { useServiceNowBridge } from './hooks/useServiceNowBridge'
+import { useServiceNowRelay } from './hooks/useServiceNowRelay'
 import { useIsNarrow } from './hooks/useMediaQuery'
 import { playShiftSound } from './services/soundEffects'
 import { isFirebaseConfigured } from './services/firebase'
@@ -309,8 +310,11 @@ function App() {
   // follows the live job, so ticks from another station show up here too.
   const workProcesses = useProcesses({ siteId: activeSiteId, canRead: canUse })
 
-  // Unassigned ServiceNow tasks, only on a PC running the watcher script.
-  const serviceNow = useServiceNowBridge()
+  // Unassigned ServiceNow tasks: from the main PC's relay when this page was
+  // opened from it, otherwise from the watcher in this browser (if any).
+  const serviceNowBridge = useServiceNowBridge()
+  const serviceNowRelay = useServiceNowRelay(auth.user)
+  const serviceNow = serviceNowRelay.present ? serviceNowRelay : serviceNowBridge
   const [checklistJobId, setChecklistJobId] = useState(null)
   const checklistJob = jobs.openJobs.find(job => job.id === checklistJobId) || null
 

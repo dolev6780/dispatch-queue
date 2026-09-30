@@ -2,28 +2,30 @@ import { readFileSync } from 'node:fs'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
-// The ServiceNow watcher is published next to the app under a fixed name, so
-// the Install button can link to it and Tampermonkey can check it for
-// updates. A URL ending in .user.js is what makes Tampermonkey offer to
-// install it.
-const WATCHER = 'servicenow-watcher.user.js'
-const watcherSource = () => readFileSync(new URL(`./tools/${WATCHER}`, import.meta.url))
+// The lab-PC tools are published next to the app under fixed names: the
+// ServiceNow watcher, so the Install button can link to it and Tampermonkey
+// can check it for updates (a URL ending in .user.js is what makes
+// Tampermonkey offer to install it), and the relay, for the Download button.
+const TOOLS = ['servicenow-watcher.user.js', 'servicenow-relay.mjs']
+const toolSource = (name) => readFileSync(new URL(`./tools/${name}`, import.meta.url))
 
-const servicenowWatcher = () => ({
-  name: 'servicenow-watcher',
+const labTools = () => ({
+  name: 'lab-tools',
   configureServer(server) {
-    server.middlewares.use(`/${WATCHER}`, (req, res) => {
-      res.setHeader('Content-Type', 'text/javascript; charset=utf-8')
-      res.end(watcherSource())
-    })
+    for (const name of TOOLS) {
+      server.middlewares.use(`/${name}`, (req, res) => {
+        res.setHeader('Content-Type', 'text/javascript; charset=utf-8')
+        res.end(toolSource(name))
+      })
+    }
   },
   generateBundle() {
-    this.emitFile({ type: 'asset', fileName: WATCHER, source: watcherSource() })
+    for (const name of TOOLS) this.emitFile({ type: 'asset', fileName: name, source: toolSource(name) })
   }
 })
 
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
-  plugins: [react(), servicenowWatcher()],
+  plugins: [react(), labTools()],
 })

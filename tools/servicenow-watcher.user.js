@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NBLAB · ServiceNow unassigned-task watcher
 // @namespace    nblab
-// @version      1.3.1
+// @version      1.4.0
 // @description  Chime and desktop notification when a new unassigned task reaches your group. Uses your own ServiceNow login; nothing leaves this browser.
 // @homepageURL  https://dolev6780.github.io/dispatch-queue/
 // @downloadURL  https://dolev6780.github.io/dispatch-queue/servicenow-watcher.user.js
@@ -15,10 +15,13 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_addValueChangeListener
+// @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
+// @connect      127.0.0.1
+// @connect      localhost
 // ==/UserScript==
 
-/* global GM_notification, GM_setValue, GM_getValue, GM_addValueChangeListener, GM_info, unsafeWindow */
+/* global GM_notification, GM_setValue, GM_getValue, GM_addValueChangeListener, GM_xmlhttpRequest, GM_info, unsafeWindow */
 
 /*
  * How it works
@@ -49,6 +52,13 @@
  * through Firebase or any server — so it only works in this browser, and only
  * while a ServiceNow tab here is open and watching. On any other page on
  * localhost it does nothing.
+ *
+ * On every lab PC
+ * ---------------
+ * If the NBLAB relay (servicenow-relay.mjs) runs on this PC, each check is
+ * also handed to it at http://127.0.0.1:8787, and it shows the list to the
+ * other lab PCs — kept in its memory only, never in Firebase. Without the
+ * relay this step quietly does nothing.
  */
 
 const DEFAULTS = {
@@ -68,6 +78,7 @@ const DEFAULTS = {
 const MIN_SECONDS = 30
 const MAX_SINGLE_NOTIFICATIONS = 4
 const SNAPSHOT_KEY = 'nblab.sn.snapshot.v1'
+const RELAY_URL = 'http://127.0.0.1:8787/api/servicenow'
 const SNAPSHOT_TASKS = 20
 const BRIDGE_SOURCE = 'nblab-servicenow-watcher'
 
@@ -193,15 +204,36 @@ const main = () => {
 
   // For the NBLAB page on this PC (see "On the NBLAB website" above).
   const canPublish = typeof GM_setValue === 'function' && typeof GM_getValue === 'function'
+
+  // The relay on this PC (if it runs) shares the list with the other lab PCs.
+  // Through Tampermonkey, so ServiceNow's own page rules cannot block it.
+  let relayState = 'none' // none | shared | off
+  const sendToRelay = (snapshot) => {
+    if (typeof GM_xmlhttpRequest !== 'function') return
+    GM_xmlhttpRequest({
+      method: 'POST',
+      url: RELAY_URL,
+      headers: { 'Content-Type': 'application/json' },
+      data: JSON.stringify(snapshot),
+      timeout: 5000,
+      onload: (response) => { relayState = response.status === 204 ? 'shared' : 'off' },
+      onerror: () => { relayState = 'off' },
+      ontimeout: () => { relayState = 'off' }
+    })
+  }
+
   const publish = (tasks) => {
-    if (!canPublish) return
-    GM_setValue(SNAPSHOT_KEY, snapshotOf({
+    const snapshot = snapshotOf({
       tasks, table: settings.table, groups: settings.groups, origin: page.location.origin, now: Date.now()
-    }))
+    })
+    if (canPublish) GM_setValue(SNAPSHOT_KEY, snapshot)
+    sendToRelay(snapshot)
   }
   const publishFailure = (error) => {
-    if (!canPublish) return
-    GM_setValue(SNAPSHOT_KEY, failedSnapshot(GM_getValue(SNAPSHOT_KEY, null), { groups: settings.groups, error, now: Date.now() }))
+    const previous = canPublish ? GM_getValue(SNAPSHOT_KEY, null) : null
+    const snapshot = failedSnapshot(previous, { groups: settings.groups, error, now: Date.now() })
+    if (canPublish) GM_setValue(SNAPSHOT_KEY, snapshot)
+    sendToRelay(snapshot)
   }
 
   // ---- Badge -----------------------------------------------------------------
@@ -365,8 +397,11 @@ const main = () => {
       if (fresh.length) chime()
 
       failures = 0
-      show(`${tasks.length} unassigned · ${clock()}`, tasks.length ? '#f76b15' : '#4ade80',
-        `Watching ${settings.groups.join(', ')} (${settings.table}). Click to open the list; Test to check now; ⚙ for settings.`)
+      const shared = relayState === 'shared' ? ' · shared' : ''
+      show(`${tasks.length} unassigned · ${clock()}${shared}`, tasks.length ? '#f76b15' : '#4ade80',
+        `Watching ${settings.groups.join(', ')} (${settings.table}). ` +
+        (relayState === 'shared' ? 'The relay on this PC shares the list with the other lab PCs. ' : 'No relay running on this PC. ') +
+        'Click to open the list; Test to check now; ⚙ for settings.')
     } catch (err) {
       failures++
       showFailure(err)
