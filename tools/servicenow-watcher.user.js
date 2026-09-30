@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         NBLAB · ServiceNow unassigned-task watcher
 // @namespace    nblab
-// @version      1.3.0
+// @version      1.3.1
 // @description  Chime and desktop notification when a new unassigned task reaches your group. Uses your own ServiceNow login; nothing leaves this browser.
 // @homepageURL  https://dolev6780.github.io/dispatch-queue/
 // @downloadURL  https://dolev6780.github.io/dispatch-queue/servicenow-watcher.user.js
@@ -18,7 +18,7 @@
 // @grant        unsafeWindow
 // ==/UserScript==
 
-/* global GM_notification, GM_setValue, GM_getValue, GM_addValueChangeListener, unsafeWindow */
+/* global GM_notification, GM_setValue, GM_getValue, GM_addValueChangeListener, GM_info, unsafeWindow */
 
 /*
  * How it works
@@ -408,7 +408,9 @@ const main = () => {
   // next ServiceNow tab takes over.
   if (navigator.locks?.request) {
     show('Watcher: standby (another tab is watching)', '#75756f')
-    navigator.locks.request('nblab-servicenow-watcher', () => {
+    // Versioned, so a ServiceNow tab still running an older copy of this
+    // script (opened before an update) cannot hold the watching role.
+    navigator.locks.request('nblab-servicenow-watcher-v2', () => {
       check()
       return new Promise(() => {})
     })
@@ -422,19 +424,18 @@ const main = () => {
 const bridge = () => {
   const page = typeof unsafeWindow !== 'undefined' ? unsafeWindow : window
   const origin = page.location.origin
-  const post = (snapshot) => {
-    if (snapshot) page.postMessage({ source: BRIDGE_SOURCE, snapshot }, origin)
-  }
-  post(GM_getValue(SNAPSHOT_KEY, null))
+  const version = (typeof GM_info !== 'undefined' && GM_info?.script?.version) || ''
+  // Always post, even before any ServiceNow tab has reported: the page then
+  // knows the watcher is installed here and can say what it is waiting for.
+  const post = () => page.postMessage({ source: BRIDGE_SOURCE, version, snapshot: GM_getValue(SNAPSHOT_KEY, null) }, origin)
+  post()
   // Every check in the ServiceNow tab rewrites the snapshot, so this fires
   // about once a minute — which is also how the page knows the watcher is
   // still running.
-  GM_addValueChangeListener(SNAPSHOT_KEY, (_name, _old, value) => post(value))
+  GM_addValueChangeListener(SNAPSHOT_KEY, () => post())
   // The page asks when it starts, in case it started after this script.
   page.addEventListener('message', (event) => {
-    if (event.origin === origin && event.data?.source === 'nblab-app' && event.data.type === 'servicenow:hello') {
-      post(GM_getValue(SNAPSHOT_KEY, null))
-    }
+    if (event.origin === origin && event.data?.source === 'nblab-app' && event.data.type === 'servicenow:hello') post()
   })
 }
 

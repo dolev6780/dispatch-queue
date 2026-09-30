@@ -1,4 +1,4 @@
-import { readSnapshot, snapshotState, openedTime, isUrgent, STALE_AFTER_MS } from './servicenow.js'
+import { readSnapshot, readWatcherMessage, snapshotState, bridgeStatus, openedTime, isUrgent, STALE_AFTER_MS } from './servicenow.js'
 
 let pass = 0
 let fail = 0
@@ -30,6 +30,16 @@ eq('long text is cut', readSnapshot(message({ ...good, tasks: [{ title: 'x'.repe
 eq('at most 50 tasks', readSnapshot(message({ ...good, tasks: Array(80).fill({}) })).tasks.length, 50)
 eq('a bad count falls back to the list', readSnapshot(message({ ...good, count: 'lots' })).count, 1)
 eq('missing fields become empty', readSnapshot(message({ tasks: [{}] })).tasks[0], { id: '', number: '', title: '', priority: '', opened: '', url: null })
+
+console.log('--- presence ---')
+eq('the watcher says hello before any ServiceNow tab reported', readWatcherMessage({ source: 'nblab-servicenow-watcher', version: '1.3.1', snapshot: null }),
+  { version: '1.3.1', snapshot: null })
+eq('...and with a snapshot', readWatcherMessage(message(good)).snapshot, good)
+eq('not from the watcher', readWatcherMessage({ source: 'x' }), null)
+eq('not installed here', bridgeStatus({ present: false, snapshot: null }, 0), 'missing')
+eq('installed, waiting for ServiceNow', bridgeStatus({ present: true, snapshot: null }, 0), 'waiting')
+eq('installed and reporting', bridgeStatus({ present: true, snapshot: good }, 2000), 'live')
+eq('installed but gone quiet', bridgeStatus({ present: true, snapshot: good }, 1000 + STALE_AFTER_MS + 1), 'stale')
 
 console.log('--- live, error, stale ---')
 eq('fresh and fine', snapshotState(good, 1000 + 60000), 'live')

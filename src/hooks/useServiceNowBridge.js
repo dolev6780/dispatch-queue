@@ -1,19 +1,23 @@
 import { useEffect, useState } from 'react'
-import { APP_SOURCE, readSnapshot } from '../services/servicenow'
+import { APP_SOURCE, readWatcherMessage } from '../services/servicenow'
 
 /**
- * Unassigned ServiceNow tasks from the lab PC's watcher script, if it runs in
- * this browser. Held in memory only — never stored, never sent anywhere.
- * Null on any station without the watcher, which then shows nothing.
+ * The lab PC's ServiceNow watcher, if it runs in this browser:
+ *   present  — the watcher answered here
+ *   version  — which version of it
+ *   snapshot — the latest unassigned tasks, or null until a ServiceNow tab
+ *              in this browser has reported
+ * Held in memory only — never stored, never sent anywhere. On any station
+ * without the watcher, `present` stays false and nothing is shown.
  */
 export const useServiceNowBridge = () => {
-  const [snapshot, setSnapshot] = useState(null)
+  const [bridge, setBridge] = useState({ present: false, version: '', snapshot: null })
 
   useEffect(() => {
     const onMessage = (event) => {
       if (event.origin !== window.location.origin) return
-      const next = readSnapshot(event.data)
-      if (next) setSnapshot(next)
+      const message = readWatcherMessage(event.data)
+      if (message) setBridge({ present: true, ...message })
     }
     window.addEventListener('message', onMessage)
     // In case the watcher started first: ask for what it has.
@@ -21,5 +25,5 @@ export const useServiceNowBridge = () => {
     return () => window.removeEventListener('message', onMessage)
   }, [])
 
-  return snapshot
+  return bridge
 }

@@ -552,6 +552,7 @@ function App() {
         }}
         tempUntil={!global && isTempMoveActive(profile, currentTime) ? formatShortDate(lastDayOf(profile.tempEndsAt)) : null}
         onNavigate={navigate}
+        serviceNow={serviceNow}
       />
     )
   }
@@ -595,7 +596,7 @@ function App() {
           onEnableNotifications={enableDesktopAlerts}
         />
       )}
-      {route === 'queue' && <ServiceNowStrip snapshot={serviceNow} now={currentTime} limit={isNarrow ? 3 : 6} />}
+      {route === 'queue' && <ServiceNowStrip bridge={serviceNow} now={currentTime} limit={isNarrow ? 3 : 6} />}
 
       <main className="main">
         {errors.map(error => (

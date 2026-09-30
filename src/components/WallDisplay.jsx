@@ -151,7 +151,7 @@ export const WallDisplay = ({
           </ul>
         </footer>
       )}
-      <ServiceNowStrip snapshot={serviceNow} now={currentTime} variant="wall" limit={4} />
+      <ServiceNowStrip bridge={serviceNow} now={currentTime} variant="wall" limit={4} />
     </div>
   )
 }

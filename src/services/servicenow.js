@@ -25,6 +25,16 @@ const httpsUrl = (value) => {
   }
 }
 
+/**
+ * A message from the watcher: which version is running in this browser, and
+ * its snapshot — null until a ServiceNow tab has reported. Anything else is
+ * not from the watcher and gives null.
+ */
+export const readWatcherMessage = (data) => {
+  if (!data || data.source !== WATCHER_SOURCE) return null
+  return { version: text(data.version, 20), snapshot: readSnapshot(data) }
+}
+
 /** A snapshot from a message, cleaned up — or null if it is not one. */
 export const readSnapshot = (data) => {
   if (!data || data.source !== WATCHER_SOURCE) return null
@@ -57,6 +67,18 @@ export const snapshotState = (snapshot, nowMs) => {
   if (!snapshot) return 'none'
   if (nowMs - snapshot.checkedAt > STALE_AFTER_MS) return 'stale'
   return snapshot.error ? 'error' : 'live'
+}
+
+/**
+ * One line on how the watcher is doing in this browser, for the Home page:
+ * missing — not running here (not installed, not updated, or not allowed on this site)
+ * waiting — running here, but no ServiceNow tab has reported yet
+ * live / error / stale — as snapshotState
+ */
+export const bridgeStatus = (bridge, nowMs) => {
+  if (!bridge?.present) return 'missing'
+  if (!bridge.snapshot) return 'waiting'
+  return snapshotState(bridge.snapshot, nowMs)
 }
 
 /** "10:41" out of ServiceNow's display date, whatever its date format. */

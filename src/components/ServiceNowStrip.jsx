@@ -1,8 +1,11 @@
 import { ExternalLink } from 'lucide-react'
 import { formatClockHM } from '../services/format'
-import { isUrgent, openedTime, snapshotState } from '../services/servicenow'
+import { bridgeStatus, isUrgent, openedTime } from '../services/servicenow'
+
+const WAITING = 'Waiting for ServiceNow — open it in this browser (reload it after an update) and press Test on its badge'
 
 const headline = (snapshot, state) => {
+  if (state === 'waiting') return WAITING
   const asOf = formatClockHM(snapshot.okAt || snapshot.checkedAt)
   if (state === 'stale') return `Watcher paused — open ServiceNow in this browser · last seen ${asOf}`
   if (state === 'error') return snapshot.error
@@ -16,9 +19,10 @@ const headline = (snapshot, state) => {
  *
  * `variant="wall"` is the read-only version for the wall display.
  */
-export const ServiceNowStrip = ({ snapshot, now, variant = 'band', limit = 6 }) => {
-  if (!snapshot) return null
-  const state = snapshotState(snapshot, now.getTime())
+export const ServiceNowStrip = ({ bridge, now, variant = 'band', limit = 6 }) => {
+  const state = bridgeStatus(bridge, now.getTime())
+  if (state === 'missing') return null
+  const snapshot = bridge.snapshot || { count: 0, tasks: [], groups: [], listUrl: null }
   const shown = snapshot.tasks.slice(0, limit)
   const more = snapshot.count - shown.length
 
@@ -60,7 +64,7 @@ export const ServiceNowStrip = ({ snapshot, now, variant = 'band', limit = 6 }) 
             </a>
           )}
         </div>
-        {state !== 'stale' && shown.length > 0 && (
+        {(state === 'live' || state === 'error') && shown.length > 0 && (
           <ul className="sn-cards">
             {shown.map(task => (
               <li key={task.id || task.number}>

@@ -912,6 +912,23 @@ button.module:hover { border-color: var(--ink); box-shadow: var(--shadow-sm); tr
   color: var(--ink-2);
 }
 .tool-note { font-size: 12.5px; color: var(--ink-3); }
+.tool-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  background: var(--surface-sunk);
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.tool-status-dot { width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--ink-3); flex-shrink: 0; }
+.tool-status.is-ok { background: var(--green-soft); color: var(--green-text); }
+.tool-status.is-ok .tool-status-dot { background: var(--green); }
+.tool-status.is-wait { background: var(--amber-soft); color: var(--ink); }
+.tool-status.is-wait .tool-status-dot { background: var(--amber); }
+.tool-status.is-bad { background: var(--red-soft); color: var(--red-text); }
+.tool-status.is-bad .tool-status-dot { background: var(--red); }
 .tool-install { align-self: center; }
 
 /* ---- Admin --------------------------------------------------------------------------------------------- */
