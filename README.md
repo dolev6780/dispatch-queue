@@ -192,7 +192,7 @@ A process can be **linked to one job type**. From then on, every new job of that
 **Install**
 
 1. Install the **Tampermonkey** extension in Edge or Chrome (if Intel IT allows it). In recent browsers, also turn on *Allow user scripts* in the extension's details.
-2. Tampermonkey → *Create a new script* → paste the whole file → *Save*.
+2. On the app's Home page, press **Install** under *Tools for the lab PC* (or open <https://dolev6780.github.io/dispatch-queue/servicenow-watcher.user.js>), then **Install** in Tampermonkey. The site publishes the script next to the app (see `vite.config.js`), and Tampermonkey checks it there for updates, so fixes reach the lab PC by themselves.
 3. If your ServiceNow address does not end in `service-now.com`, add a `// @match https://<your address>/*` line to the header.
 4. Open ServiceNow. A small badge appears bottom-left: click it and enter your **assignment group(s)** exactly as named in ServiceNow, and `sc_task` (catalog tasks) or `incident`.
 5. Press **Test** on the badge. It checks ServiceNow right away and shows a real notification for the newest waiting task (or says nothing is waiting), with the chime — so access, notifications and sound are all checked in one click. The badge says *Test OK*, or what is wrong.

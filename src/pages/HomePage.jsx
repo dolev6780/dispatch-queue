@@ -1,4 +1,4 @@
-import { ArrowRight, BookOpen, ListOrdered, Plane } from 'lucide-react'
+import { ArrowRight, BellRing, BookOpen, Download, ListOrdered, Plane } from 'lucide-react'
 import { OnDutyCard } from '../components/OnDutyCard'
 import { Eyebrow } from '../components/ui'
 import { FEATURES } from '../services/features'
@@ -6,9 +6,14 @@ import { formatLongDate } from '../services/format'
 
 const ICONS = { list: ListOrdered, book: BookOpen }
 
+// Published next to the app by vite.config.js. Opening a .user.js address is
+// what makes Tampermonkey offer to install it.
+const WATCHER_URL = `${import.meta.env.BASE_URL}servicenow-watcher.user.js`
+
 /**
  * The signed-in landing page: today at this site in one card, then the
- * modules. Signed-out visitors never see it — they get the sign-in page.
+ * modules, then tools to install on a lab PC. Signed-out visitors never see
+ * it — they get the sign-in page.
  */
 export const HomePage = ({
   site,
@@ -61,6 +66,29 @@ export const HomePage = ({
           </button>
         )
       })}
+    </section>
+
+    <section className="tools" aria-label="Tools">
+      <Eyebrow>Tools for the lab PC</Eyebrow>
+      <div className="tool-card">
+        <span className="module-icon"><BellRing size={20} /></span>
+        <div className="tool-text">
+          <span className="module-name">ServiceNow watcher</span>
+          <span className="module-desc">
+            A chime and a desktop notification on this PC when a new unassigned task reaches your group.
+            It uses your own ServiceNow login and only reads — nothing goes into this app.
+          </span>
+          <ol className="tool-steps">
+            <li>Add the <strong>Tampermonkey</strong> extension to Edge or Chrome, and turn on <em>Allow user scripts</em> in its details.</li>
+            <li>Press <strong>Install</strong> here, then <strong>Install</strong> again in Tampermonkey.</li>
+            <li>Open ServiceNow, click the badge at the bottom-left, enter your group, and press <strong>Test</strong>.</li>
+          </ol>
+          <span className="tool-note">Updates install by themselves. Without Tampermonkey, Install just shows the script.</span>
+        </div>
+        <a className="btn btn-dark tool-install" href={WATCHER_URL} target="_blank" rel="noopener noreferrer">
+          <Download size={16} /><span>Install</span>
+        </a>
+      </div>
     </section>
   </div>
 )

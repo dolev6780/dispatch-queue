@@ -1,8 +1,11 @@
 // ==UserScript==
 // @name         NBLAB · ServiceNow unassigned-task watcher
 // @namespace    nblab
-// @version      1.1.0
+// @version      1.2.0
 // @description  Chime and desktop notification when a new unassigned task reaches your group. Uses your own ServiceNow login; nothing leaves this browser.
+// @homepageURL  https://dolev6780.github.io/dispatch-queue/
+// @downloadURL  https://dolev6780.github.io/dispatch-queue/servicenow-watcher.user.js
+// @updateURL    https://dolev6780.github.io/dispatch-queue/servicenow-watcher.user.js
 // @match        https://*.service-now.com/*
 // @noframes
 // @run-at       document-idle

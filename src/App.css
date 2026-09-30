@@ -73,6 +73,7 @@
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
+  text-decoration: none;
   transition: background var(--fast), border-color var(--fast), color var(--fast), opacity var(--fast);
 }
 .btn:disabled { opacity: 0.45; }
@@ -837,6 +838,31 @@ button.module:hover { border-color: var(--ink); box-shadow: var(--shadow-sm); tr
   font-size: 12.5px;
   color: var(--ink-2);
 }
+
+/* Tools to install on a lab PC */
+.tools { display: flex; flex-direction: column; gap: 10px; }
+.tool-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 16px;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+}
+.tool-card .module-icon { margin: 0; }
+.tool-text { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.tool-steps {
+  margin: 2px 0 0 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.tool-note { font-size: 12.5px; color: var(--ink-3); }
+.tool-install { align-self: center; }
 
 /* ---- Admin --------------------------------------------------------------------------------------------- */
 .admin-page {
@@ -1777,6 +1803,8 @@ select.input { cursor: pointer; }
   .q-row .q-ctrl { margin-left: auto; }
 
   .q-aside { display: flex; }
+  .tool-card { grid-template-columns: auto minmax(0, 1fr); padding: 16px; }
+  .tool-install { grid-column: 1 / -1; width: 100%; }
   .proc-detail { padding: 18px 16px; }
   .proc-detail-head { flex-direction: column; }
   .step-edit-ctrl .icon-btn { width: 28px; }
