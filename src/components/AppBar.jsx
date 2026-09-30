@@ -1,139 +1,173 @@
-import {
-  Radio,
-  Sun,
-  Moon,
-  Cloud,
-  AlertCircle,
-  RefreshCw,
-  LayoutGrid,
-  ListOrdered,
-  ShieldCheck,
-  LogIn,
-  LogOut
-} from 'lucide-react'
-import { formatClockTime } from '../services/schedule'
+import { useState } from 'react'
+import { ChevronDown, LogOut, Menu, Moon, Sun, X } from 'lucide-react'
+import { Logo } from './ui'
+import { formatClockHMS, initialsOf, siteLabel } from '../services/format'
 
 const BASE_TABS = [
-  { id: 'home', label: 'Home', icon: LayoutGrid },
-  { id: 'queue', label: 'Queue', icon: ListOrdered }
+  { id: 'home', label: 'Home' },
+  { id: 'queue', label: 'Queue' },
+  { id: 'processes', label: 'Processes' }
 ]
 
+const CONNECTION = {
+  live: { label: 'Live', className: 'is-live' },
+  stale: { label: 'Reconnecting', className: 'is-stale' },
+  connecting: { label: 'Connecting', className: 'is-connecting' }
+}
+
+/** Where this station is: live, reconnecting, or still connecting. */
+const ConnectionDot = ({ state, withLabel = true }) => {
+  const info = CONNECTION[state] || CONNECTION.connecting
+  return (
+    <span className={`conn ${info.className}`} title={info.label} role="status">
+      <span className="conn-dot" />
+      {withLabel ? <span>{info.label}</span> : <span className="sr-only">{info.label}</span>}
+    </span>
+  )
+}
+
+/** The site this station shows. Global admins may switch; everyone else is fixed. */
+const SitePicker = ({ site, sites, onSwitchSite, className = '' }) => {
+  if (!site) return null
+  if (sites && sites.length > 1) {
+    return (
+      <label className={`site-picker is-switchable ${className}`}>
+        <span className="site-picker-text">{siteLabel(site)}</span>
+        <ChevronDown size={14} />
+        <select value={site.id} onChange={(event) => onSwitchSite(event.target.value)} aria-label="Site">
+          {sites.map(option => (
+            <option key={option.id} value={option.id}>{siteLabel(option)}</option>
+          ))}
+        </select>
+      </label>
+    )
+  }
+  return (
+    <span className={`site-picker ${className}`}>
+      <span className="site-picker-text">{siteLabel(site)}</span>
+    </span>
+  )
+}
+
 /**
- * Application top bar: brand, primary navigation, session, and the controls
- * that are global rather than page-specific.
+ * The black bar across the top of every signed-in screen.
  *
- * The Admin tab only appears for a signed-in administrator. That is a UI
- * convenience, not a security boundary — see services/auth.js.
+ * Desktop: brand, site, tabs, connection, clock, the signed-in person.
+ * Phone: the site and page as a title, the clock, and a menu for the rest.
+ * The Admin tab appears for site and global admins; hiding it is convenience —
+ * the Firestore rules are the enforcement.
  */
 export const AppBar = ({
   route,
   onNavigate,
   theme,
   onToggleTheme,
-  connectionState,
   currentTime,
   session,
-  onSignOut
+  isGlobal,
+  canAdminister,
+  site,
+  sites,
+  onSwitchSite,
+  onSignOut,
+  connection,
+  isNarrow
 }) => {
-  const tabs = session?.isAdmin
-    ? [...BASE_TABS, { id: 'admin', label: 'Admin', icon: ShieldCheck }]
-    : BASE_TABS
+  const [menuOpen, setMenuOpen] = useState(false)
+  const tabs = canAdminister ? [...BASE_TABS, { id: 'admin', label: 'Admin' }] : BASE_TABS
+  const name = session?.name || 'Account'
+  const ThemeIcon = theme === 'dark' ? Sun : Moon
+  const themeTitle = `Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`
+
+  if (isNarrow) {
+    const pageName = route === 'home' ? '' : ` ${route}`
+    const go = (target) => { setMenuOpen(false); onNavigate(target) }
+    return (
+      <header className="topbar is-narrow">
+        <div className="topbar-inner">
+          <button className="topbar-title" onClick={() => onNavigate('home')}>
+            <span>{site ? `${site.name}${pageName}` : 'NBLAB'}</span>
+            <ConnectionDot state={connection} withLabel={false} />
+          </button>
+          <span className="topbar-clock">{formatClockHMS(currentTime)}</span>
+          <button className="topbar-icon" onClick={() => setMenuOpen(true)} aria-label="Menu" aria-expanded={menuOpen}>
+            <Menu size={20} />
+          </button>
+        </div>
+
+        {menuOpen && (
+          <div className="sheet-backdrop" onClick={() => setMenuOpen(false)}>
+            <nav className="sheet" aria-label="Menu" onClick={(event) => event.stopPropagation()}>
+              <div className="sheet-head">
+                <span className="avatar">{initialsOf(name)}</span>
+                <span className="sheet-who">
+                  <strong>{name}</strong>
+                  {isGlobal && <span className="role-tag">Global admin</span>}
+                </span>
+                <button className="icon-btn" onClick={() => setMenuOpen(false)} aria-label="Close menu">
+                  <X size={18} />
+                </button>
+              </div>
+              <SitePicker site={site} sites={sites} onSwitchSite={onSwitchSite} className="is-light" />
+              <div className="sheet-links">
+                {tabs.map(tab => (
+                  <button key={tab.id} className={`sheet-link ${route === tab.id ? 'is-active' : ''}`}
+                    onClick={() => go(tab.id)} aria-current={route === tab.id ? 'page' : undefined}>
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+              <div className="sheet-foot">
+                <button className="btn btn-outline" onClick={onToggleTheme}>
+                  <ThemeIcon size={16} /><span>{theme === 'dark' ? 'Light mode' : 'Dark mode'}</span>
+                </button>
+                <button className="btn btn-outline" onClick={() => { setMenuOpen(false); onSignOut() }}>
+                  <LogOut size={16} /><span>Sign out</span>
+                </button>
+              </div>
+            </nav>
+          </div>
+        )}
+      </header>
+    )
+  }
 
   return (
-    <header className="md-app-bar">
-      <div className="md-app-bar-content">
-        <button className="md-brand" onClick={() => onNavigate('home')} title="NBLAB Management home">
-          <div className="md-brand-icon">
-            <Radio size={20} />
-          </div>
-          <div className="md-brand-title">
-            NBLAB <span className="md-brand-subtitle">Management</span>
-          </div>
+    <header className="topbar">
+      <div className="topbar-inner">
+        <button className="brand" onClick={() => onNavigate('home')} title="NBLAB Management home">
+          <Logo />
+          <span>NBLAB</span>
         </button>
 
-        <nav className="md-nav-tabs" aria-label="Primary">
-          {tabs.map(tab => {
-            const Icon = tab.icon
-            const isActive = route === tab.id
-            return (
-              <button
-                key={tab.id}
-                className={`md-nav-tab ${isActive ? 'is-active' : ''}`}
-                onClick={() => onNavigate(tab.id)}
-                aria-current={isActive ? 'page' : undefined}
-              >
-                <Icon size={17} />
-                <span>{tab.label}</span>
-              </button>
-            )
-          })}
+        <SitePicker site={site} sites={sites} onSwitchSite={onSwitchSite} />
+
+        <nav className="tabs" aria-label="Primary">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              className={`tab ${route === tab.id ? 'is-active' : ''}`}
+              onClick={() => onNavigate(tab.id)}
+              aria-current={route === tab.id ? 'page' : undefined}
+            >
+              {tab.label}
+            </button>
+          ))}
         </nav>
 
-        <div className="md-app-bar-actions">
-          {/* Read-only status. There is no local mode and no in-app config, so
-              this reports the connection rather than opening anything. It
-              stays because a wall display that has quietly stopped syncing
-              looks identical to one that is up to date. */}
-          <div
-            className={`md-firebase-chip md-firebase-${connectionState.status}`}
-            role="status"
-            title={
-              connectionState.status === 'connected'
-                ? `Live sync active${connectionState.projectId ? ` · ${connectionState.projectId}` : ''}`
-                : connectionState.status === 'connecting'
-                  ? 'Connecting to the shared board…'
-                  : connectionState.status === 'error'
-                    ? `Sync problem: ${connectionState.error || 'connection lost'}`
-                    : 'Firebase configuration missing from this build'
-            }
-          >
-            <span className="md-firebase-pulse-dot" />
-            {connectionState.status === 'connected' ? (
-              <><Cloud size={14} /><span>Live</span></>
-            ) : connectionState.status === 'connecting' ? (
-              <><RefreshCw size={14} className="bell-ringing" /><span>Connecting</span></>
-            ) : connectionState.status === 'error' ? (
-              <><AlertCircle size={14} /><span>Sync issue</span></>
-            ) : (
-              <><AlertCircle size={14} /><span>Not configured</span></>
-            )}
-          </div>
-
-          <div className="md-clock-chip">
-            <span className="md-pulse-dot" />
-            <span>{formatClockTime(currentTime)}</span>
-          </div>
-
-          {session ? (
-            <div className="md-session-chip">
-              <span className="md-session-avatar">
-                {session.name.split(' ').map(part => part[0]).join('').slice(0, 2)}
-              </span>
-              <span className="md-session-name">{session.name}</span>
-              {session.isAdmin && <ShieldCheck size={13} className="md-session-admin" />}
-              <button
-                className="md-btn-action"
-                onClick={onSignOut}
-                title="Sign out"
-                aria-label="Sign out"
-              >
-                <LogOut size={14} />
-              </button>
-            </div>
-          ) : (
-            <button className="md-button md-button-tonal" onClick={() => onNavigate('signin')}>
-              <LogIn size={15} />
-              <span>Sign in</span>
-            </button>
-          )}
-
-          <button
-            className="md-icon-button"
-            onClick={onToggleTheme}
-            title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-            aria-label="Toggle theme"
-          >
-            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+        <div className="topbar-end">
+          <ConnectionDot state={connection} />
+          <span className="topbar-clock">{formatClockHMS(currentTime)}</span>
+          <span className="who">
+            <span className="avatar">{initialsOf(name)}</span>
+            <span className="who-name">{name}</span>
+            {isGlobal && <span className="role-tag">Global admin</span>}
+          </span>
+          <button className="topbar-icon" onClick={onSignOut} title="Sign out" aria-label="Sign out">
+            <LogOut size={17} />
+          </button>
+          <button className="topbar-icon" onClick={onToggleTheme} title={themeTitle} aria-label={themeTitle}>
+            <ThemeIcon size={17} />
           </button>
         </div>
       </div>

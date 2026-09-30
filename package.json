@@ -8,10 +8,10 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "node src/services/dailyReset.test.mjs && node src/services/schedule.test.mjs && node src/services/auth.test.mjs && node src/services/guard.test.mjs",
+    "test": "node src/services/dailyReset.test.mjs && node src/services/schedule.test.mjs && node src/services/credentials.test.mjs && node src/services/logic.test.mjs && node src/services/jobs.test.mjs && node src/services/format.test.mjs && node src/services/processes.test.mjs && node tools/servicenow-watcher.test.mjs",
     "rules": "firebase deploy --only firestore:rules",
     "rules:check": "firebase deploy --only firestore:rules --dry-run",
-    "auth:check": "node scripts/check-auth.mjs"
+    "test:rules": "firebase emulators:exec --only firestore --project demo-nblab \"node rules-tests/rules.test.mjs\""
   },
   "dependencies": {
     "firebase": "^12.19.0",
@@ -20,6 +20,7 @@
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "@vitejs/plugin-react": "^6.1.1",

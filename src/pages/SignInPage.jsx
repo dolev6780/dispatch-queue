@@ -1,157 +1,158 @@
-import { useState } from 'react'
-import { KeyRound, ShieldCheck, ArrowLeft, AlertCircle, Eye, EyeOff } from 'lucide-react'
-import { findMemberByWorkId, hasAnyAdmin, hashWorkId, isWorkIdTaken, normaliseWorkId } from '../services/auth'
+import { useEffect, useState } from 'react'
+import { AlertCircle, ArrowRight, Eye, EyeOff, KeyRound, Moon, Sun } from 'lucide-react'
+import { Logo } from '../components/ui'
+import { signInWithWwid, createFirstAdmin, isBootstrapClaimed } from '../services/authService'
+import { validateWwid } from '../services/credentials'
+
+/** The dark-topped card shared by sign-in and first-site setup. */
+export const AuthCard = ({ eyebrow = 'NBLAB Management', title, children, footer, theme, onToggleTheme }) => (
+  <div className="auth">
+    {onToggleTheme && (
+      <button className="icon-btn auth-theme" onClick={onToggleTheme}
+        aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}>
+        {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+      </button>
+    )}
+    <section className="auth-card">
+      <div className="auth-top">
+        <Logo size={36} />
+        <span className="auth-eyebrow">{eyebrow}</span>
+        <h1 className="auth-title">{title}</h1>
+      </div>
+      <div className="auth-body">{children}</div>
+    </section>
+    {footer && <p className="auth-foot">{footer}</p>}
+  </div>
+)
+
+/** The work ID field: hidden like a password, with an eye to check it. */
+const WorkIdField = ({ value, onChange, autoFocus }) => {
+  const [visible, setVisible] = useState(false)
+  return (
+    <label className="field">
+      <span className="field-label">Work ID</span>
+      <span className="input-wrap">
+        <input
+          className="input is-mono is-lg"
+          type={visible ? 'text' : 'password'}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder="Your work ID"
+          autoComplete="off"
+          autoCapitalize="characters"
+          spellCheck={false}
+          autoFocus={autoFocus}
+        />
+        <button type="button" className="input-eye" onClick={() => setVisible(v => !v)}
+          aria-label={visible ? 'Hide work ID' : 'Show work ID'} aria-pressed={visible}>
+          {visible ? <EyeOff size={18} /> : <Eye size={18} />}
+        </button>
+      </span>
+    </label>
+  )
+}
 
 /**
- * Work-ID sign-in.
+ * Sign in with a work ID — one field. The account decides which site you land
+ * on, so there is no site picker.
  *
- * Two modes:
- *  - normal: type a work ID, matched against the roster's stored hashes.
- *  - bootstrap: nobody is an administrator yet, so the first person to claim
- *    one becomes it. This path closes itself as soon as an admin exists,
- *    which is why it is safe to leave in rather than seeding a default
- *    password everyone would forget to change.
+ * On an empty database this becomes first-time setup: the first global
+ * administrator and the first site are created together. The rules permit
+ * that only while config/bootstrap is absent, and it is written in the same
+ * batch, so the path closes for good once setup succeeds.
  */
-export const SignInPage = ({ roster, onSignedIn, onNavigate, onSetupAdmin }) => {
-  const [workId, setWorkId] = useState('')
-  const [memberId, setMemberId] = useState('')
+export const SignInPage = ({ theme, onToggleTheme }) => {
+  const [wwid, setWwid] = useState('')
+  const [name, setName] = useState('')
+  const [siteName, setSiteName] = useState('')
+  const [siteLocation, setSiteLocation] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [reveal, setReveal] = useState(false)
+  const [needsBootstrap, setNeedsBootstrap] = useState(null) // null = checking
 
-  const needsBootstrap = !hasAnyAdmin(roster)
+  useEffect(() => {
+    let active = true
+    isBootstrapClaimed()
+      .then(claimed => { if (active) setNeedsBootstrap(!claimed) })
+      .catch(() => { if (active) setNeedsBootstrap(false) })
+    return () => { active = false }
+  }, [])
 
-  const handleSignIn = async (event) => {
+  const submit = async (event) => {
     event.preventDefault()
     setError('')
+
+    const problem = validateWwid(wwid)
+    if (problem) { setError(problem); return }
+    if (needsBootstrap && !name.trim()) { setError('Enter your name.'); return }
+    if (needsBootstrap && !siteName.trim()) { setError('Name the first site.'); return }
+
     setBusy(true)
     try {
-      const member = await findMemberByWorkId(roster, workId)
-      if (!member) {
-        setError('That work ID was not recognised.')
-        return
+      if (needsBootstrap) {
+        await createFirstAdmin({ wwid, name, siteName, siteLocation })
+      } else {
+        await signInWithWwid(wwid)
       }
-      onSignedIn(member.id)
-    } catch {
-      setError('Could not verify the work ID on this browser.')
-    } finally {
+      // App reacts to the auth change; this page simply unmounts.
+    } catch (err) {
+      setError(err.message || 'Sign-in failed.')
       setBusy(false)
     }
   }
 
-  const handleBootstrap = async (event) => {
-    event.preventDefault()
-    setError('')
-
-    if (!memberId) {
-      setError('Choose who you are first.')
-      return
-    }
-    if (normaliseWorkId(workId).length < 3) {
-      setError('Use a work ID of at least 3 characters.')
-      return
-    }
-
-    setBusy(true)
-    try {
-      if (await isWorkIdTaken(roster, workId, memberId)) {
-        setError('That work ID is already in use.')
-        return
-      }
-      const hash = await hashWorkId(workId)
-      onSetupAdmin(memberId, hash)
-      onSignedIn(memberId)
-    } catch {
-      setError('Could not set the work ID on this browser.')
-    } finally {
-      setBusy(false)
-    }
+  if (needsBootstrap === null) {
+    return (
+      <AuthCard title="Sign in to the board" theme={theme} onToggleTheme={onToggleTheme}>
+        <p className="auth-wait" role="status">Connecting…</p>
+      </AuthCard>
+    )
   }
 
   return (
-    <div className="md-page md-auth-page">
-      <section className="md-auth-card">
-        <div className="md-auth-icon">
-          {needsBootstrap ? <ShieldCheck size={26} /> : <KeyRound size={26} />}
-        </div>
-
-        <h1 className="md-auth-title">
-          {needsBootstrap ? 'First-time setup' : 'Sign in'}
-        </h1>
-        <p className="md-auth-lede">
-          {needsBootstrap
-            ? 'No administrator has been set up yet. Choose who you are and pick a work ID — you will become the administrator.'
-            : 'Enter your work ID to edit the dispatch queue. Viewing the board does not require signing in.'}
-        </p>
-
-        <form className="md-auth-form" onSubmit={needsBootstrap ? handleBootstrap : handleSignIn}>
-          {needsBootstrap && (
-            <label className="md-form-field">
-              <span className="md-form-label">Who are you?</span>
-              <select
-                className="md-input"
-                value={memberId}
-                onChange={(event) => setMemberId(event.target.value)}
-              >
-                <option value="">Select your name…</option>
-                {roster.map(person => (
-                  <option key={person.id} value={person.id}>{person.name}</option>
-                ))}
-              </select>
+    <AuthCard
+      title={needsBootstrap ? 'Set up NBLAB' : 'Sign in to the board'}
+      theme={theme}
+      onToggleTheme={onToggleTheme}
+      footer={needsBootstrap ? null : 'No account yet? Ask your site admin to add you.'}
+    >
+      <form className="auth-form" onSubmit={submit}>
+        {needsBootstrap && (
+          <>
+            <p className="auth-lede">
+              No accounts exist yet. Create the first administrator and the first site — more sites and people come after.
+            </p>
+            <label className="field">
+              <span className="field-label">Your name</span>
+              <input className="input" value={name} onChange={e => setName(e.target.value)} placeholder="Full name" autoComplete="name" />
             </label>
-          )}
-
-          <label className="md-form-field">
-            <span className="md-form-label">Work ID</span>
-            <div className="md-input-with-trailing">
-              <input
-                className="md-input"
-                type={reveal ? 'text' : 'password'}
-                inputMode="text"
-                autoComplete="off"
-                placeholder={needsBootstrap ? 'Choose a work ID' : 'Your work ID'}
-                value={workId}
-                onChange={(event) => setWorkId(event.target.value)}
-                autoFocus
-              />
-              <button
-                type="button"
-                className="md-btn-action"
-                onClick={() => setReveal(shown => !shown)}
-                title={reveal ? 'Hide' : 'Show'}
-                aria-label={reveal ? 'Hide work ID' : 'Show work ID'}
-              >
-                {reveal ? <EyeOff size={15} /> : <Eye size={15} />}
-              </button>
+            <div className="field-pair">
+              <label className="field">
+                <span className="field-label">First site</span>
+                <input className="input" value={siteName} onChange={e => setSiteName(e.target.value)} placeholder="e.g. L12" />
+              </label>
+              <label className="field">
+                <span className="field-label">Description <span className="field-optional">optional</span></span>
+                <input className="input" value={siteLocation} onChange={e => setSiteLocation(e.target.value)} placeholder="e.g. Main lab" />
+              </label>
             </div>
-          </label>
+          </>
+        )}
 
-          {error && (
-            <div className="md-calc-alert" role="alert">
-              <AlertCircle size={16} />
-              <span>{error}</span>
-            </div>
-          )}
+        <WorkIdField value={wwid} onChange={setWwid} autoFocus={!needsBootstrap} />
 
-          <button
-            type="submit"
-            className="md-button md-button-filled md-auth-submit"
-            disabled={busy || !workId.trim()}
-          >
-            {busy ? 'Checking…' : needsBootstrap ? 'Create administrator' : 'Sign in'}
-          </button>
-        </form>
+        {error && <p className="alert" role="alert"><AlertCircle size={16} /><span>{error}</span></p>}
 
-        <button className="md-button md-button-text md-auth-back" onClick={() => onNavigate('queue')}>
-          <ArrowLeft size={15} />
-          <span>Back to the board</span>
+        <button type="submit" className="btn btn-primary btn-lg btn-block" disabled={busy}>
+          <span>{busy ? 'Signing in…' : needsBootstrap ? 'Create administrator' : 'Sign in'}</span>
+          {!busy && <ArrowRight size={18} />}
         </button>
 
-        <p className="md-auth-note">
-          Signing in records who changed the queue and keeps the board from being edited by
-          passers-by. It is not a security boundary — anyone determined can work around it.
+        <p className="key-note">
+          <KeyRound size={18} />
+          <span>Your work ID is your password. Anyone who knows it can sign in as you — keep it to yourself.</span>
         </p>
-      </section>
-    </div>
+      </form>
+    </AuthCard>
   )
 }

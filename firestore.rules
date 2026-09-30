@@ -1,94 +1,375 @@
 rules_version = '2';
 
-// Firestore security rules for Dispatch Queue HQ.
+// Firestore security rules for NBLAB Management — multi-site, accounts are workers.
 //
-// Deploy with:  firebase deploy --only firestore:rules
-// (or paste into Firebase Console -> Firestore Database -> Rules)
+// Deploy:  npm run test:rules   (prove in the emulator)
+//          npm run rules        (release)
 //
-// ---------------------------------------------------------------------------
-// READ THIS BEFORE SHIPPING
-// ---------------------------------------------------------------------------
-// The app writes its shared state with no signed-in user, so these rules are
-// necessarily open to anonymous callers. The Firebase web config is public by
-// design (it ships inside the JS bundle), so anyone who opens the deployed
-// site can read it and talk to this project directly.
+// These rules are the real enforcement. The client decides what to OFFER
+// (src/services/roles.js mirrors this file); these decide what is ALLOWED.
 //
-// What these rules DO give you over `allow read, write: if true`:
-//   * Only one document is reachable. Every other path is sealed, so nobody
-//     can use your project as free storage or read other collections.
-//   * The payload is loosely shape-checked and bounded, so the document
-//     cannot be replaced with arbitrary junk or grown without limit.
+// THREAT MODEL. Firebase Email/Password sign-up is callable by anyone holding
+// the public API key — the app itself relies on it to create accounts. So a
+// token proves nothing. Every read and write requires a PROFILE (users/{uid}),
+// and only an administrator can create one.
 //
-// What they DO NOT give you:
-//   * They do not stop a determined visitor from editing the roster, because
-//     there is no identity to check. If that matters, enable Firebase
-//     Anonymous Auth (or a real sign-in) plus App Check, then add
-//     `request.auth != null &&` to the `allow write` condition below.
+// ACCOUNTS ARE WORKERS. Every account is a worker at a site. Its HOME site is
+// users/{uid}.siteId. A TEMPORARY move sets tempSiteId + tempEndsAt; until
+// tempEndsAt the person is fully relocated — they use the other site's board
+// and appear only in its queue — and afterwards they are back home
+// automatically. That flip is decided here with request.time, so it needs no
+// job to undo it.
 //
-// The shape check is deliberately lenient: a rule that is too strict fails
-// writes silently and looks like "sync is broken". Tighten it once you have
-// verified writes land — `hasOnly([...])` on the key set is the usual next
-// step, and the key list this app writes is roster, dayQueues, daySchedules,
-// updatedBy, updatedAt, createdAt.
-// ---------------------------------------------------------------------------
+// ROLES
+//   member        works at their CURRENT site (home, or temporary if active)
+//   site admin    siteAdmin == true: administers their HOME site's accounts,
+//                 including moving them elsewhere — even while temporarily
+//                 away themselves. Never touches a global admin.
+//   global admin  isGlobalAdmin == true (or the pre-sites isAdmin): everything.
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // The single shared dispatch state document the app syncs.
-    // Note: the client uses setDoc(..., { merge: true }), so
-    // request.resource.data is the full document AFTER the merge.
-    match /dispatch_queue/shared_state {
-      // Reads stay open: the wall display must render without signing in.
-      allow read: if true;
+    // ---- identity ------------------------------------------------------------
 
-      // Split out from a bare `allow write`: on a delete request.resource is
-      // null, so a single validated write rule blocks deletes outright and
-      // the document can never be cleared. Delete adds no real exposure here
-      // because the same callers can already overwrite the document.
-      allow create, update: if signedIn() && isSaneDispatchState(request.resource.data);
-      allow delete: if signedIn();
+    function signedIn() {
+      return request.auth != null;
     }
 
-    // Everything else is denied.
+    function userPath(uid) {
+      return /databases/$(database)/documents/users/$(uid);
+    }
+
+    function sitePath(siteId) {
+      return /databases/$(database)/documents/sites/$(siteId);
+    }
+
+    function hasProfile() {
+      return signedIn() && exists(userPath(request.auth.uid));
+    }
+
+    function me() {
+      return get(userPath(request.auth.uid)).data;
+    }
+
+    function isGlobalAdmin() {
+      return hasProfile()
+        && (me().get('isGlobalAdmin', false) == true || me().get('isAdmin', false) == true);
+    }
+
+    // Is a temporary move in force right now for this profile?
+    function tempActive(p) {
+      return p.get('tempSiteId', null) != null
+        && p.get('tempEndsAt', null) != null
+        && request.time < p.tempEndsAt;
+    }
+
+    // Does this profile work at this site today?
+    function worksAt(p, siteId) {
+      return tempActive(p) ? p.tempSiteId == siteId : p.get('siteId', '') == siteId;
+    }
+
+    // May use this site's board.
+    function belongsTo(siteId) {
+      return hasProfile() && (isGlobalAdmin() || worksAt(me(), siteId));
+    }
+
+    // Administers this site: global, or site admin whose HOME it is.
+    function isHomeAdmin(siteId) {
+      return hasProfile()
+        && (isGlobalAdmin()
+            || (me().get('siteAdmin', false) == true && me().get('siteId', '') == siteId));
+    }
+
+    function isAnySiteAdmin() {
+      return hasProfile() && (isGlobalAdmin() || me().get('siteAdmin', false) == true);
+    }
+
+    function bootstrapPath() {
+      return /databases/$(database)/documents/config/bootstrap;
+    }
+
+    function bootstrapClaimed() {
+      return exists(bootstrapPath());
+    }
+
+    // ---- validation ----------------------------------------------------------
+
+    // A profile is shared with colleagues at the same site (the queue lists
+    // them by name), so it carries nothing credential-related: no WWID, and
+    // no WWID hint is ever written. `wwidHint` is tolerated only so that older
+    // documents can still be edited while the client strips it.
+    function validProfile(d) {
+      return d.keys().hasOnly(['name', 'role', 'siteId', 'tempSiteId', 'tempEndsAt',
+                               'siteAdmin', 'isGlobalAdmin', 'active', 'wwidHint',
+                               'createdAt', 'updatedAt'])
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 80
+        && d.siteId is string
+        && existsAfter(sitePath(d.siteId))
+        && d.get('siteAdmin', false) is bool
+        && d.get('isGlobalAdmin', false) is bool
+        && d.get('active', true) is bool
+        && validTempMove(d);
+    }
+
+    // Either no temporary move, or a site AND an end time, to a different
+    // existing site.
+    function validTempMove(d) {
+      return (d.get('tempSiteId', null) == null && d.get('tempEndsAt', null) == null)
+        || (d.tempSiteId is string
+            && d.tempEndsAt is timestamp
+            && d.tempSiteId != d.siteId
+            && existsAfter(sitePath(d.tempSiteId)));
+    }
+
+    function validSite(d) {
+      return d.keys().hasOnly(['name', 'location', 'createdAt', 'updatedAt'])
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 80
+        && (!('location' in d) || (d.location is string && d.location.size() <= 120));
+    }
+
+    function validState(d) {
+      return d.keys().hasOnly(['dayQueues', 'daySchedules', 'lastResetDate',
+                               'updatedBy', 'updatedAt', 'createdAt'])
+        && d.updatedBy == request.auth.uid
+        && (!('dayQueues' in d)
+            || (d.dayQueues is map && d.dayQueues.keys().hasOnly(['0','1','2','3','4','5','6'])))
+        && (!('daySchedules' in d)
+            || (d.daySchedules is map && d.daySchedules.keys().hasOnly(['0','1','2','3','4','5','6'])))
+        && (!('lastResetDate' in d) || d.lastResetDate == null
+            || (d.lastResetDate is string && d.lastResetDate.size() == 10));
+    }
+
+    // Keep this list in step with src/services/jobs.js JOB_TYPES.
+    function jobTypes() {
+      return ['pc-refresh', 'otr', 'pc-supply', 'incident', 'quick-it',
+              'ssd-upgrade', 'ram-upgrade', 'av-incident', 'av-task'];
+    }
+
+    function processPath(siteId, processId) {
+      return /databases/$(database)/documents/sites/$(siteId)/features/work-processes/processes/$(processId);
+    }
+
+    // A work process: a titled list of steps, optionally linked to one job
+    // type. Stamped with who changed it last, at server time.
+    function validProcess(d) {
+      return d.keys().hasOnly(['title', 'jobType', 'steps', 'notes',
+                               'createdAt', 'updatedAt', 'updatedBy'])
+        && d.title is string && d.title.size() > 0 && d.title.size() <= 80
+        && (!('jobType' in d) || d.jobType == '' || d.jobType in jobTypes())
+        && d.steps is list && d.steps.size() > 0 && d.steps.size() <= 30
+        && (!('notes' in d) || (d.notes is string && d.notes.size() <= 2000))
+        && d.updatedBy == request.auth.uid
+        && d.updatedAt == request.time;
+    }
+
+    // A job either has no process, or carries an exact copy of one of this
+    // site's processes — title and steps — with every step still unticked.
+    function validJobProcess(d, siteId) {
+      return (!('processId' in d) && !('processTitle' in d) && !('steps' in d) && !('checks' in d))
+        || (d.processId is string
+            && exists(processPath(siteId, d.processId))
+            && d.processTitle == get(processPath(siteId, d.processId)).data.title
+            && d.steps == get(processPath(siteId, d.processId)).data.steps
+            && d.checks is list
+            && d.checks.size() == d.steps.size()
+            && d.checks.hasOnly([false]));
+    }
+
+    function validNewJob(d, siteId) {
+      return d.keys().hasOnly(['type', 'note', 'assigneeId', 'assigneeName',
+                               'createdBy', 'createdByName', 'createdAt', 'status',
+                               'processId', 'processTitle', 'steps', 'checks'])
+        && d.type in jobTypes()
+        && d.status == 'open'
+        && d.createdAt == request.time
+        && d.assigneeId is string
+        && d.assigneeName is string && d.assigneeName.size() <= 80
+        && d.createdByName is string && d.createdByName.size() <= 80
+        && (!('note' in d) || (d.note is string && d.note.size() <= 200))
+        && validJobProcess(d, siteId);
+    }
+
+    // The assignee must be a real account working at this site today.
+    function assigneeWorksAt(uid, siteId) {
+      return exists(userPath(uid)) && worksAt(get(userPath(uid)).data, siteId);
+    }
+
+    function resetMovesForward() {
+      return resource.data.get('lastResetDate', null) == null
+        || request.resource.data.get('lastResetDate', null) >= resource.data.lastResetDate;
+    }
+
+    // ---- users (= workers) ---------------------------------------------------
+
+    match /users/{uid} {
+      // Yourself; colleagues who work at your current site; the admins of the
+      // person's home site; global admins.
+      allow get: if signedIn()
+        && (request.auth.uid == uid
+            || isGlobalAdmin()
+            || isHomeAdmin(resource.data.get('siteId', ''))
+            || (hasProfile() && worksAt(me(), resource.data.get('siteId', '')))
+            || (hasProfile() && worksAt(me(), resource.data.get('tempSiteId', ''))));
+
+      // Queries must filter on siteId or tempSiteId for these to be provable:
+      // colleagues at my current site (home residents or visitors), or my
+      // home site's accounts if I administer it.
+      allow list: if isGlobalAdmin()
+        || isHomeAdmin(resource.data.siteId)
+        || (hasProfile() && worksAt(me(), resource.data.siteId))
+        || (hasProfile() && worksAt(me(), resource.data.tempSiteId));
+
+      // First-time setup: first global admin + first site + bootstrap marker
+      // in ONE batch, tied together with getAfter.
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && !bootstrapClaimed()
+        && validProfile(request.resource.data)
+        && request.resource.data.isGlobalAdmin == true
+        && getAfter(bootstrapPath()).data.claimedBy == request.auth.uid;
+
+      // Global admins: anything, except revoking themselves.
+      allow create, update: if isGlobalAdmin() && validProfile(request.resource.data);
+      allow delete: if isGlobalAdmin() && request.auth.uid != uid;
+
+      // Site admins create workers at their home site — never a global admin.
+      allow create: if isHomeAdmin(request.resource.data.siteId)
+        && validProfile(request.resource.data)
+        && request.resource.data.get('isGlobalAdmin', false) == false;
+
+      // ...and manage their home site's workers: edit, move temporarily or
+      // permanently, revoke. Never a global admin, never themselves. A
+      // PERMANENT move must drop site-admin rights, so a site admin cannot
+      // plant an administrator in someone else's site.
+      allow update: if hasProfile()
+        && request.auth.uid != uid
+        && isHomeAdmin(resource.data.siteId)
+        && resource.data.get('isGlobalAdmin', false) == false
+        && resource.data.get('isAdmin', false) == false
+        && request.resource.data.get('isGlobalAdmin', false) == false
+        && (request.resource.data.siteId == resource.data.siteId
+            || request.resource.data.get('siteAdmin', false) == false)
+        && validProfile(request.resource.data);
+
+      allow delete: if hasProfile()
+        && request.auth.uid != uid
+        && isHomeAdmin(resource.data.siteId)
+        && resource.data.get('isGlobalAdmin', false) == false
+        && resource.data.get('isAdmin', false) == false;
+    }
+
+    // ---- bootstrap marker ----------------------------------------------------
+
+    match /config/bootstrap {
+      allow get: if true;
+      allow create: if signedIn()
+        && !bootstrapClaimed()
+        && request.resource.data.keys().hasOnly(['claimedBy', 'claimedAt'])
+        && request.resource.data.claimedBy == request.auth.uid
+        && getAfter(userPath(request.auth.uid)).data.get('isGlobalAdmin', false) == true;
+      allow update, delete: if false;
+    }
+
+    // ---- sites ---------------------------------------------------------------
+
+    match /sites/{siteId} {
+      // Your current site; any site admin (they choose move destinations).
+      allow get: if belongsTo(siteId) || isAnySiteAdmin();
+      allow list: if isAnySiteAdmin();
+
+      allow create: if validSite(request.resource.data)
+        && (isGlobalAdmin()
+            || (signedIn() && !bootstrapClaimed()
+                && getAfter(bootstrapPath()).data.claimedBy == request.auth.uid));
+
+      allow update: if isGlobalAdmin() && validSite(request.resource.data);
+      allow delete: if isGlobalAdmin();
+
+      // The live board: anyone working at the site today.
+      match /features/{featureId}/state/{stateId} {
+        allow read: if belongsTo(siteId);
+        allow create: if belongsTo(siteId)
+          && stateId == 'current'
+          && validState(request.resource.data);
+        allow update: if belongsTo(siteId)
+          && stateId == 'current'
+          && validState(request.resource.data)
+          && resetMovesForward();
+        allow delete: if isHomeAdmin(siteId);
+      }
+
+      // Jobs. Anyone working at the site logs one for a colleague who works
+      // there today. It stays OPEN until someone entitled marks it done. A job
+      // with a work process carries its steps as a checklist; the only other
+      // change allowed is ticking those steps, and it cannot be marked done
+      // until every one is ticked.
+      match /features/{featureId}/jobs/{jobId} {
+        allow read: if belongsTo(siteId);
+
+        allow create: if belongsTo(siteId)
+          && featureId == 'dispatch-queue'
+          && validNewJob(request.resource.data, siteId)
+          && request.resource.data.createdBy == request.auth.uid
+          && assigneeWorksAt(request.resource.data.assigneeId, siteId);
+
+        allow update: if belongsTo(siteId)
+          && resource.data.status == 'open'
+          && request.resource.data.status == 'done'
+          && request.resource.data.doneBy == request.auth.uid
+          && request.resource.data.doneAt == request.time
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'doneBy', 'doneAt'])
+          && resource.data.get('checks', []).hasOnly([true])
+          && (request.auth.uid == resource.data.assigneeId
+              || request.auth.uid == resource.data.createdBy
+              || isHomeAdmin(siteId));
+
+        // Ticking or unticking steps while the job is open.
+        allow update: if belongsTo(siteId)
+          && resource.data.status == 'open'
+          && 'checks' in resource.data
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['checks'])
+          && request.resource.data.checks is list
+          && request.resource.data.checks.size() == resource.data.steps.size()
+          && request.resource.data.checks.hasOnly([true, false])
+          && (request.auth.uid == resource.data.assigneeId
+              || request.auth.uid == resource.data.createdBy
+              || isHomeAdmin(siteId));
+
+        // For mistakes: the creator while still open, or an administrator.
+        allow delete: if isHomeAdmin(siteId)
+          || (belongsTo(siteId)
+              && resource.data.createdBy == request.auth.uid
+              && resource.data.status == 'open');
+      }
+
+      // Work processes: the site's step-by-step guides, kept by its
+      // administrators and readable by everyone working there.
+      match /features/{featureId}/processes/{processId} {
+        allow read: if featureId == 'work-processes' && (belongsTo(siteId) || isHomeAdmin(siteId));
+        allow create, update: if featureId == 'work-processes'
+          && isHomeAdmin(siteId)
+          && validProcess(request.resource.data);
+        allow delete: if isHomeAdmin(siteId);
+      }
+
+      // Superseded: people used to be kept here, separate from accounts.
+      // Readable and removable by the site's admins for cleanup only.
+      match /features/{featureId}/workers/{workerId} {
+        allow read, delete: if isHomeAdmin(siteId);
+      }
+    }
+
+    // ---- pre-sites data --------------------------------------------------------
+
+    match /features/{document=**} {
+      allow read, delete: if isGlobalAdmin();
+    }
+
+    // ---- everything else -------------------------------------------------------
+
     match /{document=**} {
       allow read, write: if false;
     }
-  }
-
-  // ===========================================================================
-  // THE HARDENING SWITCH
-  //
-  // Returning `true` leaves writes open to anonymous callers — the state the
-  // board shipped in, and the only safe setting until Firebase Auth is
-  // actually working.
-  //
-  // To harden, in order (the order matters — reversing it takes the board
-  // down for everyone):
-  //   1. Firebase Console -> Build -> Authentication -> Get started
-  //      -> Sign-in method -> enable "Anonymous".
-  //   2. Run `npm run auth:check`. It must report ENABLED.
-  //   3. Change the line below to:  return request.auth != null;
-  //   4. Run `npm run rules`.
-  //
-  // The app already signs in anonymously on load (see services/firebase.js),
-  // so no code change is needed — step 1 is the only thing that cannot be
-  // done from this repository.
-  //
-  // What this buys: direct API traffic (curl, scanners, scripts) is shut out.
-  // What it does not buy: anyone who loads the page still gets a token, so it
-  // is not a substitute for real per-user auth.
-  // ===========================================================================
-  function signedIn() {
-    return true;
-  }
-
-  // Lenient bounds check — rejects junk without being brittle about which
-  // optional fields happen to be present on a given write.
-  function isSaneDispatchState(data) {
-    return (!('roster' in data)       || (data.roster is list && data.roster.size() <= 200))
-        && (!('dayQueues' in data)    || (data.dayQueues is map && data.dayQueues.keys().size() <= 7))
-        && (!('daySchedules' in data) || (data.daySchedules is map && data.daySchedules.keys().size() <= 7))
-        && (!('updatedBy' in data)    || (data.updatedBy is string && data.updatedBy.size() <= 64));
   }
 }

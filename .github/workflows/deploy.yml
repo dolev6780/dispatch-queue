@@ -42,8 +42,8 @@ jobs:
       # Firebase web config is injected at build time. These are repository
       # secrets, not environment secrets, so add them under
       # Settings -> Secrets and variables -> Actions -> Repository secrets.
-      # If they are absent the build still succeeds and the app simply starts
-      # in Local Mode, so a fork without secrets is not broken by this.
+      # If they are absent the build still succeeds, and the app shows a
+      # "Not configured" screen instead of connecting anywhere.
       - name: Build
         run: npm run build
         env:

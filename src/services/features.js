@@ -1,0 +1,28 @@
+/**
+ * The modules the app offers.
+ *
+ * Defined in code rather than managed from the admin page: each module needs
+ * a screen written for it, so a module an administrator could create without
+ * one was just an empty tile. Each module's data lives in its own collection
+ * under every site: sites/{siteId}/features/{id}/...
+ */
+
+export const DISPATCH_QUEUE = 'dispatch-queue'
+export const WORK_PROCESSES = 'work-processes'
+
+export const FEATURES = [
+  {
+    id: DISPATCH_QUEUE,
+    route: 'queue',
+    name: 'Dispatch Queue',
+    description: 'Build the daily queue, see who is on duty, and drive the wall display.',
+    icon: 'list'
+  },
+  {
+    id: WORK_PROCESSES,
+    route: 'processes',
+    name: 'Work Processes',
+    description: 'Step-by-step guides for the lab\'s work. A linked job type turns into a checklist on every job.',
+    icon: 'book'
+  }
+]

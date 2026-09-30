@@ -1,52 +1,40 @@
-import { CloudOff, RefreshCw, AlertCircle } from 'lucide-react'
+import { AlertCircle, CloudOff, Lock, RefreshCw, UserX } from 'lucide-react'
+
+const ICONS = {
+  working: RefreshCw,
+  offline: CloudOff,
+  error: AlertCircle,
+  forbidden: Lock,
+  account: UserX
+}
 
 /**
- * Blocks the app until the shared board has actually loaded.
+ * Full-page status: loading, disconnected, not permitted, or an account
+ * problem.
  *
- * The board runs on Firestore alone — there is no local copy to fall back on.
- * That makes this screen important rather than cosmetic: without it, a
- * disconnected station would render an empty roster, and on the wall display
- * "not loaded yet" and "the queue is genuinely empty" look identical.
+ * Every action carries its own label. The previous version reused one screen
+ * for all of these, so an access-denied message claimed the board was
+ * unreachable, and a button labelled "Try again" actually signed the station
+ * out — which is how a rebooting wall display got stranded.
  */
-export const ConnectionGate = ({ status, error, onRetry }) => {
-  const isConnecting = status === 'connecting' || status === 'connected'
-  const isUnconfigured = status === 'unconfigured'
+export const ConnectionGate = ({ kind = 'working', title, message, detail, actions = [] }) => {
+  const Icon = ICONS[kind] || AlertCircle
+  const isWorking = kind === 'working'
 
   return (
-    <div className="md-gate">
-      <div className={`md-gate-icon ${isConnecting ? 'is-working' : 'is-error'}`}>
-        {isConnecting ? (
-          <RefreshCw size={30} className="bell-ringing" />
-        ) : isUnconfigured ? (
-          <AlertCircle size={30} />
-        ) : (
-          <CloudOff size={30} />
-        )}
-      </div>
-
-      <h2 className="md-gate-title">
-        {isConnecting
-          ? 'Loading the board…'
-          : isUnconfigured
-            ? 'Not configured'
-            : 'Cannot reach the board'}
-      </h2>
-
-      <p className="md-gate-text">
-        {isConnecting
-          ? 'Connecting to the shared dispatch board.'
-          : isUnconfigured
-            ? 'This build is missing its Firebase configuration, so there is no board to connect to.'
-            : 'The dispatch queue lives in the cloud and there is no offline copy, so nothing can be shown until the connection is back.'}
-      </p>
-
-      {error && !isConnecting && <p className="md-gate-detail">{error}</p>}
-
-      {!isConnecting && (
-        <button className="md-button md-button-filled" onClick={onRetry}>
-          <RefreshCw size={16} />
-          <span>Try again</span>
-        </button>
+    <div className={`gate is-${kind}`} role={isWorking ? 'status' : 'alert'}>
+      <span className="gate-icon"><Icon size={26} className={isWorking ? 'spin' : undefined} /></span>
+      <h2 className="gate-title">{title}</h2>
+      {message && <p className="gate-text">{message}</p>}
+      {detail && <p className="gate-detail">{detail}</p>}
+      {actions.length > 0 && (
+        <div className="gate-actions">
+          {actions.map(action => (
+            <button key={action.label} className={`btn ${action.primary ? 'btn-dark' : 'btn-outline'}`} onClick={action.onClick}>
+              {action.label}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   )

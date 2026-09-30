@@ -1,229 +1,123 @@
 /* ==========================================================================
-   Dispatch HQ — "Iris" Design System
-   Material Design 3 token architecture drawn from the brand orb: an
-   iridescent blue -> indigo -> fuchsia sweep over deep indigo-black
-   surfaces, with glass + glow treatments that stay legible on a
-   wall-mounted display.
+   NBLAB Management — design tokens and base styles
+
+   Warm paper background, near-black ink, one signal colour (orange) for
+   "now": the person on duty, the live progress, the primary action. Blue,
+   green and red are kept for status only. Condensed Archivo for display,
+   IBM Plex Mono for times and labels, so numbers line up down a column.
    ========================================================================== */
 
 :root {
-  color-scheme: dark;
-
-  /* ---- Brand / Primary -------------------------------------------------- */
-  --md-sys-color-primary: #818cf8;
-  --md-sys-color-on-primary: #0a0a14;
-  --md-sys-color-primary-container: rgba(129, 140, 248, 0.14);
-  --md-sys-color-primary-container-hover: rgba(129, 140, 248, 0.26);
-  --md-sys-color-on-primary-container: #c7d2fe;
-  --md-sys-color-primary-hover: #a5b4fc;
-  --md-sys-color-primary-dim: #4f46e5;
-
-  --md-sys-color-secondary: #e879f9;
-  --md-sys-color-on-secondary: #1a0a1e;
-  --md-sys-color-secondary-container: rgba(232, 121, 249, 0.13);
-
-  /* ---- Surfaces (indigo-black ramp) ------------------------------------- */
-  --md-sys-color-surface: #0a0a14;
-  --md-sys-color-surface-dim: #06060e;
-  --md-sys-color-surface-container-lowest: #06060e;
-  --md-sys-color-surface-container-low: #101020;
-  --md-sys-color-surface-container: #18182c;
-  --md-sys-color-surface-container-high: #20203a;
-  --md-sys-color-surface-container-highest: #2b2b4a;
-
-  /* ---- Content ---------------------------------------------------------- */
-  --md-sys-color-on-surface: #eceafd;
-  --md-sys-color-on-surface-variant: #a3a0c8;
-  --md-sys-color-outline: rgba(165, 180, 252, 0.18);
-  --md-sys-color-outline-strong: rgba(129, 140, 248, 0.45);
-  --md-sys-color-outline-variant: rgba(165, 180, 252, 0.09);
-
-  /* ---- Semantic --------------------------------------------------------- */
-  --md-sys-color-error: #fb7185;
-  --md-sys-color-error-container: rgba(251, 113, 133, 0.14);
-  --md-sys-color-error-border: rgba(251, 113, 133, 0.35);
-  --md-sys-color-success: #34d399;
-  --md-sys-color-success-container: rgba(52, 211, 153, 0.1);
-  --md-sys-color-success-border: rgba(52, 211, 153, 0.38);
-  --md-sys-color-warning: #fbbf24;
-  --md-sys-color-warning-container: rgba(251, 191, 36, 0.1);
-  --md-sys-color-warning-border: rgba(251, 191, 36, 0.38);
-
-  /* ---- Queue status roles ----------------------------------------------- */
-  --status-dispatch: #818cf8;
-  --status-dispatch-bg: rgba(129, 140, 248, 0.14);
-  --status-dispatch-border: rgba(129, 140, 248, 0.45);
-
-  --status-queue: #c084fc;
-  --status-queue-bg: rgba(192, 132, 252, 0.12);
-  --status-queue-border: rgba(192, 132, 252, 0.32);
-
-  --status-completed: #6f6f95;
-  --status-completed-bg: rgba(111, 111, 149, 0.16);
-  --status-completed-border: rgba(111, 111, 149, 0.3);
-
-  /* ---- Veils painted ON TOP of a primary-filled surface ------------------ */
-  /* Dark theme: primary is a bright indigo, so veils must be dark to read. */
-  --veil-on-primary: rgba(10, 10, 20, 0.18);
-  --veil-on-primary-strong: rgba(10, 10, 20, 0.34);
-
-  /* ---- Gradients — the orb's blue -> indigo -> fuchsia sweep ------------- */
-  --gradient-primary: linear-gradient(135deg, #60a5fa 0%, #818cf8 46%, #e879f9 100%);
-  --gradient-primary-vivid: linear-gradient(135deg, #93c5fd 0%, #a5b4fc 46%, #f0abfc 100%);
-  --gradient-card: linear-gradient(158deg, rgba(129, 140, 248, 0.07) 0%, rgba(232, 121, 249, 0.025) 42%, transparent 72%);
-  --gradient-panel: linear-gradient(180deg, rgba(165, 180, 252, 0.05) 0%, transparent 60%);
-  --gradient-sheen: linear-gradient(115deg, transparent 18%, rgba(255, 255, 255, 0.1) 50%, transparent 82%);
-  --gradient-text: linear-gradient(120deg, #eceafd 0%, #a5b4fc 52%, #f0abfc 100%);
-
-  /* ---- Glow & Glass ----------------------------------------------------- */
-  --glow-ring: rgba(129, 140, 248, 0.38);
-  --glow-primary: 0 0 0 1px rgba(129, 140, 248, 0.24), 0 8px 28px -8px rgba(129, 140, 248, 0.45);
-  --glow-primary-strong: 0 0 32px rgba(129, 140, 248, 0.45), 0 0 0 1px rgba(192, 132, 252, 0.45);
-  --glow-dot: 0 0 10px rgba(129, 140, 248, 0.9);
-
-  --glass-bg: rgba(14, 14, 28, 0.72);
-  --glass-bg-strong: rgba(10, 10, 22, 0.88);
-  --glass-border: rgba(165, 180, 252, 0.14);
-  --glass-blur: saturate(180%) blur(18px);
-  --scrim: rgba(5, 5, 12, 0.78);
-
-  /* ---- Typography ------------------------------------------------------- */
-  --md-font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
-  --md-font-display: 'Outfit', 'Inter', sans-serif;
-  --md-font-mono: 'JetBrains Mono', ui-monospace, monospace;
-
-  /* ---- Elevation -------------------------------------------------------- */
-  --md-elevation-0: none;
-  --md-elevation-1: 0 1px 2px rgba(0, 0, 0, 0.45), 0 2px 10px -3px rgba(0, 0, 0, 0.5);
-  --md-elevation-2: 0 2px 4px rgba(0, 0, 0, 0.42), 0 10px 24px -8px rgba(0, 0, 0, 0.58);
-  --md-elevation-3: 0 4px 8px rgba(0, 0, 0, 0.4), 0 18px 40px -12px rgba(0, 0, 0, 0.62);
-  --md-elevation-4: 0 8px 16px rgba(0, 0, 0, 0.4), 0 30px 60px -16px rgba(0, 0, 0, 0.68);
-
-  /* ---- Shape ------------------------------------------------------------ */
-  --md-shape-xs: 6px;
-  --md-shape-sm: 10px;
-  --md-shape-md: 14px;
-  --md-shape-lg: 20px;
-  --md-shape-xl: 28px;
-  --md-shape-full: 9999px;
-
-  /* ---- State layers ----------------------------------------------------- */
-  --md-state-hover: rgba(165, 180, 252, 0.08);
-  --md-state-focus: rgba(129, 140, 248, 0.18);
-  --md-state-pressed: rgba(129, 140, 248, 0.24);
-
-  /* ---- Motion ----------------------------------------------------------- */
-  --md-motion-standard: cubic-bezier(0.2, 0, 0, 1);
-  --md-motion-emphasized: cubic-bezier(0.2, 0, 0.2, 1);
-  --md-motion-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
-  --md-transition: 0.22s var(--md-motion-standard);
-  --md-transition-slow: 0.4s var(--md-motion-emphasized);
-
-  /* ---- Ambient page backdrop -------------------------------------------- */
-  --backdrop-glow:
-    radial-gradient(900px 520px at 16% -8%, rgba(96, 165, 250, 0.12), transparent 62%),
-    radial-gradient(760px 480px at 88% 4%, rgba(232, 121, 249, 0.10), transparent 60%),
-    radial-gradient(1100px 700px at 50% 108%, rgba(129, 140, 248, 0.07), transparent 66%);
-  --backdrop-grid-line: rgba(165, 180, 252, 0.035);
-}
-
-/* ==========================================================================
-   Light Theme — crisp daylight console
-   ========================================================================== */
-[data-theme="light"] {
   color-scheme: light;
 
-  /* Accents sit at indigo-600/fuchsia-700 so small text on white clears
-     WCAG AA (4.5:1) — indigo-500 measured 4.47:1 and just missed. */
-  --md-sys-color-primary: #4f46e5;
-  --md-sys-color-on-primary: #ffffff;
-  --md-sys-color-primary-container: #e5e3fd;
-  --md-sys-color-primary-container-hover: #d4d0fb;
-  --md-sys-color-on-primary-container: #2e2a7a;
-  --md-sys-color-primary-hover: #4338ca;
-  --md-sys-color-primary-dim: #818cf8;
+  /* ---- Paper & ink ------------------------------------------------------- */
+  --bg: #f1efea;
+  --surface: #ffffff;
+  --surface-sunk: #f7f6f2;
+  --beige: #e8e4db;
+  --beige-ink: #857f73;
+  --ink: #18191c;
+  --ink-2: #4a4c52;
+  --ink-3: #85878d;
+  --line: #e2ded5;
+  --line-strong: #cdc8bd;
+  --hover: rgba(24, 25, 28, 0.05);
 
-  --md-sys-color-secondary: #a21caf;
-  --md-sys-color-on-secondary: #ffffff;
-  --md-sys-color-secondary-container: rgba(162, 28, 175, 0.11);
+  /* ---- Signal ------------------------------------------------------------- */
+  --accent: #f76b15;
+  --accent-hover: #e25e0c;
+  --accent-ink: #ffffff;
+  --accent-text: #c2470a;
+  --accent-soft: #fde4d2;
+  --accent-tint: #fff4eb;
+  --accent-line: #f7c9a6;
 
-  --md-sys-color-surface: #f8f8fe;
-  --md-sys-color-surface-dim: #eeeef8;
-  --md-sys-color-surface-container-lowest: #ffffff;
-  --md-sys-color-surface-container-low: #ffffff;
-  --md-sys-color-surface-container: #f3f3fb;
-  --md-sys-color-surface-container-high: #e9e9f6;
-  --md-sys-color-surface-container-highest: #dcdcef;
+  /* ---- Status ------------------------------------------------------------- */
+  --blue: #2563eb;
+  --blue-text: #1d4fd6;
+  --blue-soft: #e3ebfd;
+  --blue-line: #bfd0f8;
+  --green: #16a34a;
+  --green-text: #147a3b;
+  --green-soft: #dbf1e2;
+  --red: #dc2626;
+  --red-text: #b91c1c;
+  --red-soft: #fce3e3;
+  --amber: #d97706;
+  --amber-soft: #fcefd7;
 
-  --md-sys-color-on-surface: #16162e;
-  --md-sys-color-on-surface-variant: #5b5b80;
-  --md-sys-color-outline: rgba(30, 27, 75, 0.14);
-  --md-sys-color-outline-strong: rgba(79, 70, 229, 0.5);
-  --md-sys-color-outline-variant: rgba(30, 27, 75, 0.07);
+  /* ---- Night: the top bar, the on-duty card, the wall display -------------- */
+  --night: #18191c;
+  --night-2: #232428;
+  --night-3: #2e2f34;
+  --night-line: #36373d;
+  --night-ink: #f4f2ed;
+  --night-ink-2: #a9a8a3;
+  --night-ink-3: #75756f;
 
-  --md-sys-color-error: #b91c1c;
-  --md-sys-color-error-container: rgba(185, 28, 28, 0.09);
-  --md-sys-color-error-border: rgba(185, 28, 28, 0.3);
-  --md-sys-color-success: #047857;
-  --md-sys-color-success-container: rgba(4, 120, 87, 0.09);
-  --md-sys-color-success-border: rgba(4, 120, 87, 0.3);
-  --md-sys-color-warning: #b45309;
-  --md-sys-color-warning-container: rgba(180, 83, 9, 0.09);
-  --md-sys-color-warning-border: rgba(180, 83, 9, 0.3);
+  --scrim: rgba(18, 19, 22, 0.55);
+  --shadow-sm: 0 1px 2px rgba(24, 25, 28, 0.06);
+  --shadow-lg: 0 18px 50px -12px rgba(24, 25, 28, 0.35), 0 2px 6px rgba(24, 25, 28, 0.08);
 
-  --status-dispatch: #4f46e5;
-  --status-dispatch-bg: rgba(79, 70, 229, 0.1);
-  --status-dispatch-border: rgba(79, 70, 229, 0.38);
+  /* ---- Type ----------------------------------------------------------------- */
+  --font: 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
 
-  --status-queue: #7c3aed;
-  --status-queue-bg: rgba(124, 58, 237, 0.1);
-  --status-queue-border: rgba(124, 58, 237, 0.3);
+  /* ---- Shape & motion ---------------------------------------------------------- */
+  --radius-sm: 4px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --fast: 0.15s var(--ease);
 
-  --status-completed: #64748b;
-  --status-completed-bg: rgba(100, 116, 139, 0.1);
-  --status-completed-border: rgba(100, 116, 139, 0.26);
-
-  /* Light theme: primary is deep indigo with white text, so veils go light. */
-  --veil-on-primary: rgba(255, 255, 255, 0.2);
-  --veil-on-primary-strong: rgba(255, 255, 255, 0.4);
-
-  /* Every stop stays dark enough for white text to clear AA on top of it. */
-  --gradient-primary: linear-gradient(135deg, #4f46e5 0%, #7c3aed 48%, #a21caf 100%);
-  --gradient-primary-vivid: linear-gradient(135deg, #4f46e5 0%, #9333ea 48%, #c026d3 100%);
-  --gradient-card: linear-gradient(158deg, rgba(79, 70, 229, 0.05) 0%, rgba(162, 28, 175, 0.022) 42%, transparent 72%);
-  --gradient-panel: linear-gradient(180deg, rgba(30, 27, 75, 0.03) 0%, transparent 60%);
-  --gradient-sheen: linear-gradient(115deg, transparent 18%, rgba(255, 255, 255, 0.35) 50%, transparent 82%);
-  --gradient-text: linear-gradient(120deg, #16162e 0%, #4f46e5 58%, #a21caf 100%);
-
-  --glow-ring: rgba(79, 70, 229, 0.3);
-  --glow-primary: 0 0 0 1px rgba(79, 70, 229, 0.18), 0 8px 24px -8px rgba(79, 70, 229, 0.38);
-  --glow-primary-strong: 0 0 26px rgba(79, 70, 229, 0.32), 0 0 0 1px rgba(162, 28, 175, 0.35);
-  --glow-dot: 0 0 8px rgba(79, 70, 229, 0.7);
-
-  --glass-bg: rgba(255, 255, 255, 0.78);
-  --glass-bg-strong: rgba(255, 255, 255, 0.92);
-  --glass-border: rgba(30, 27, 75, 0.1);
-  --scrim: rgba(18, 16, 48, 0.44);
-
-  --md-elevation-1: 0 1px 2px rgba(30, 27, 75, 0.06), 0 2px 8px -2px rgba(30, 27, 75, 0.08);
-  --md-elevation-2: 0 2px 4px rgba(30, 27, 75, 0.07), 0 8px 20px -6px rgba(30, 27, 75, 0.12);
-  --md-elevation-3: 0 4px 8px rgba(30, 27, 75, 0.07), 0 16px 34px -10px rgba(30, 27, 75, 0.16);
-  --md-elevation-4: 0 8px 16px rgba(30, 27, 75, 0.08), 0 28px 54px -14px rgba(30, 27, 75, 0.2);
-
-  --md-state-hover: rgba(30, 27, 75, 0.05);
-  --md-state-focus: rgba(79, 70, 229, 0.14);
-  --md-state-pressed: rgba(79, 70, 229, 0.2);
-
-  --backdrop-glow:
-    radial-gradient(900px 520px at 16% -8%, rgba(79, 70, 229, 0.11), transparent 62%),
-    radial-gradient(760px 480px at 88% 4%, rgba(192, 38, 211, 0.085), transparent 60%),
-    radial-gradient(1100px 700px at 50% 108%, rgba(124, 58, 237, 0.055), transparent 66%);
-  --backdrop-grid-line: rgba(30, 27, 75, 0.035);
+  --page-max: 1320px;
+  --gutter: 32px;
 }
 
-/* ==========================================================================
-   Base
-   ========================================================================== */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #111214;
+  --surface: #1a1b1e;
+  --surface-sunk: #161719;
+  --beige: #24231f;
+  --beige-ink: #938d80;
+  --ink: #f1efea;
+  --ink-2: #bdbab2;
+  --ink-3: #85837d;
+  --line: #2b2c30;
+  --line-strong: #3b3c42;
+  --hover: rgba(241, 239, 234, 0.06);
+
+  --accent-text: #ff8c42;
+  --accent-soft: rgba(247, 107, 21, 0.2);
+  --accent-tint: rgba(247, 107, 21, 0.09);
+  --accent-line: rgba(247, 107, 21, 0.4);
+
+  --blue-text: #86a8ff;
+  --blue-soft: rgba(37, 99, 235, 0.2);
+  --blue-line: rgba(96, 140, 255, 0.4);
+  --green-text: #5ad487;
+  --green-soft: rgba(22, 163, 74, 0.2);
+  --red-text: #fb7f7f;
+  --red-soft: rgba(220, 38, 38, 0.2);
+  --amber-soft: rgba(217, 119, 6, 0.2);
+
+  --night: #0b0b0d;
+  --night-2: #18191c;
+  --night-3: #232428;
+  --night-line: #2c2d32;
+
+  --scrim: rgba(0, 0, 0, 0.66);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 24px 60px -12px rgba(0, 0, 0, 0.7), 0 0 0 1px var(--line);
+}
+
+@media (max-width: 720px) {
+  :root { --gutter: 16px; }
+}
+
+/* ---- Reset ---------------------------------------------------------------------- */
 *, *::before, *::after {
   box-sizing: border-box;
   margin: 0;
@@ -231,143 +125,50 @@
 }
 
 html {
-  scroll-behavior: smooth;
-  font-size: 17px;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  text-rendering: optimizeLegibility;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 body {
   min-height: 100vh;
-  background-color: var(--md-sys-color-surface);
-  color: var(--md-sys-color-on-surface);
-  font-family: var(--md-font-family);
-  line-height: 1.5;
-  overflow-x: hidden;
-  transition: background-color var(--md-transition-slow), color var(--md-transition-slow);
+  min-height: 100dvh;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Ambient aurora glow behind everything */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: -2;
-  pointer-events: none;
-  background-image: var(--backdrop-glow);
-}
-
-/* Faint operations grid, faded out toward the edges */
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  pointer-events: none;
-  opacity: 0.55;
-  background-image:
-    linear-gradient(var(--backdrop-grid-line) 1px, transparent 1px),
-    linear-gradient(90deg, var(--backdrop-grid-line) 1px, transparent 1px);
-  background-size: 56px 56px;
-  -webkit-mask-image: radial-gradient(circle 900px at 50% 12%, #000 0%, transparent 78%);
-  mask-image: radial-gradient(circle 900px at 50% 12%, #000 0%, transparent 78%);
-}
-
-/* ==========================================================================
-   Scrollbar
-   ========================================================================== */
-::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--md-sys-color-surface-container-highest);
-  border: 3px solid transparent;
-  background-clip: content-box;
-  border-radius: var(--md-shape-full);
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--md-sys-color-primary);
-  background-clip: content-box;
-}
-
-* {
-  scrollbar-color: var(--md-sys-color-surface-container-highest) transparent;
-  scrollbar-width: thin;
-}
-
-/* ==========================================================================
-   Typography
-   ========================================================================== */
-h1, h2, h3, h4, h5, h6 {
-  font-family: var(--md-font-display);
-  font-weight: 700;
-  line-height: 1.22;
-  color: var(--md-sys-color-on-surface);
-  letter-spacing: -0.02em;
-}
-
-code, pre {
-  font-family: var(--md-font-mono);
+button, input, select, textarea {
+  font: inherit;
+  color: inherit;
 }
 
 button {
   cursor: pointer;
-  border: none;
   background: none;
-  font-family: inherit;
-  font-size: inherit;
-  color: inherit;
+  border: none;
 }
 
-input, select, textarea {
-  font-family: inherit;
-  font-size: inherit;
+button:disabled {
+  cursor: not-allowed;
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 ::selection {
-  background: var(--md-sys-color-primary);
-  color: var(--md-sys-color-on-primary);
+  background: var(--accent-soft);
 }
 
-/* Consistent keyboard focus ring across the whole app */
-:focus-visible {
-  outline: 2px solid var(--md-sys-color-primary);
-  outline-offset: 2px;
-  border-radius: var(--md-shape-xs);
-}
-
-/* Native time pickers render a dark glyph that vanishes on dark surfaces.
-   invert(1) guarantees a light glyph; the rest just tints it toward indigo. */
-input[type="time"]::-webkit-calendar-picker-indicator {
-  filter: invert(1) sepia(22%) saturate(420%) hue-rotate(200deg) brightness(1.05);
-  cursor: pointer;
-}
-
-[data-theme="light"] input[type="time"]::-webkit-calendar-picker-indicator {
-  filter: none;
-}
-
-/* ==========================================================================
-   Reduced motion
-   ========================================================================== */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
   }
 }

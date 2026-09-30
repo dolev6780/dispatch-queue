@@ -33,7 +33,14 @@ export const toDateKey = (date) =>
  */
 export const resolveDailyReset = ({ isStateLoaded, lastResetDate, todayDateKey }) => {
   if (!isStateLoaded) return { action: 'wait' }
-  if (lastResetDate === todayDateKey) return { action: 'none' }
   if (!lastResetDate) return { action: 'adopt', date: todayDateKey }
+  // Reset only when the stored date is strictly EARLIER than today.
+  //
+  // An equality check used to treat a date in the future as "a new day": if
+  // one station's clock or time zone crossed midnight before another's, the
+  // two would each see the other's date as different and keep resetting back
+  // and forth, erasing the queue on every bounce. YYYY-MM-DD compares
+  // correctly as a string.
+  if (lastResetDate >= todayDateKey) return { action: 'none' }
   return { action: 'reset', date: todayDateKey }
 }
