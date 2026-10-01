@@ -1,9 +1,12 @@
 import { useState } from 'react'
-import { AlertCircle, Check, Download, FileText, Pencil, Plus, Printer, Tag, Trash2, X } from 'lucide-react'
-import { Eyebrow } from '../components/ui'
+import { AlertCircle, Check, Download, FileText, Monitor, Pencil, Plus, Printer, Tag, Trash2, X } from 'lucide-react'
+import { Eyebrow, Switch } from '../components/ui'
 import { AutomationDialog } from '../components/AutomationDialog'
-import { deleteAutomation, saveAutomation } from '../services/db'
-import { automationSummary, builtinValues, cleanAutomation, fillSticker, matchAutomation, readFields } from '../services/automation'
+import { deleteAutomation, saveAgentSettings, saveAutomation } from '../services/db'
+import {
+  AGENT_DEFAULTS, automationSummary, builtinValues, cleanAgentSettings, cleanAutomation, fillSticker, matchAutomation, readFields,
+  validateAgentSettings
+} from '../services/automation'
 import { siteLabel } from '../services/format'
 
 const StickerPreview = ({ lines }) => (
@@ -54,12 +57,100 @@ const AutomationCard = ({ automation, canEdit, onEdit, onToggle, onDelete }) => 
 }
 
 /**
+ * Where every lab PC at the site listens, where its files to print are, and
+ * test mode. The agents read this by themselves; a PC whose own setup window
+ * sets a folder keeps its own. Printers are always chosen on each PC.
+ */
+const LabPcSettings = ({ settings, canEdit, onSave }) => {
+  const [draft, setDraft] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [problem, setProblem] = useState('')
+  const shown = settings ? cleanAgentSettings(settings) : null
+
+  const startEditing = () => { setProblem(''); setDraft(shown || AGENT_DEFAULTS) }
+  const set = (field) => (value) => setDraft(current => ({ ...current, [field]: value }))
+  const save = async (event) => {
+    event.preventDefault()
+    const invalid = validateAgentSettings(draft)
+    if (invalid) { setProblem(invalid); return }
+    setSaving(true)
+    setProblem('')
+    try {
+      await onSave(cleanAgentSettings(draft))
+      setDraft(null)
+    } catch (err) {
+      setProblem(err?.message || 'The settings were not saved.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <section className="card auto-pcs" aria-labelledby="pcs-title">
+      <div className="card-head">
+        <h3 id="pcs-title" className="card-title"><Monitor size={17} /> Lab PC settings</h3>
+        {canEdit && !draft && (
+          <button className="btn btn-sm btn-outline" onClick={startEditing}><Pencil size={14} /><span>{shown ? 'Edit' : 'Set up'}</span></button>
+        )}
+      </div>
+      <p className="field-hint">
+        Every lab PC with the agent follows these within a few minutes — no need to touch the PCs. A PC that sets a folder in
+        its own setup window keeps its own. <code>%USERPROFILE%</code> is each person&apos;s own folder.
+        The two printers are chosen on each PC.
+      </p>
+
+      {draft ? (
+        <form className="auto-pcs-form" onSubmit={save}>
+          <div className="field-pair">
+            <label className="field">
+              <span className="field-label">Folder to listen to</span>
+              <input className="input is-mono" value={draft.watchFolder} maxLength={260} onChange={e => set('watchFolder')(e.target.value)}
+                placeholder={AGENT_DEFAULTS.watchFolder} spellCheck={false} />
+              <span className="field-hint">Where the Grab &amp; Go files arrive.</span>
+            </label>
+            <label className="field">
+              <span className="field-label">Files to print are in</span>
+              <input className="input is-mono" value={draft.filesFolder} maxLength={260} onChange={e => set('filesFolder')(e.target.value)}
+                placeholder={AGENT_DEFAULTS.filesFolder} spellCheck={false} />
+              <span className="field-hint">The LDO form and the rest, by the names in the automations. A network share works too.</span>
+            </label>
+          </div>
+          <div className="field">
+            <span className="field-label">Test mode</span>
+            <div className="print-row">
+              <Switch on={draft.dryRun} onChange={set('dryRun')} label="Test mode" />
+              <span className="print-row-name">{draft.dryRun ? 'On — the PCs only notify what they would print' : 'Off — the PCs print'}</span>
+            </div>
+          </div>
+          {problem && <p className="alert" role="alert"><AlertCircle size={16} /><span>{problem}</span></p>}
+          <div className="auto-pcs-actions">
+            <button type="button" className="btn btn-ghost" onClick={() => setDraft(null)} disabled={saving}>Cancel</button>
+            <button type="submit" className="btn btn-dark" disabled={saving}>{saving ? 'Saving…' : 'Save for every PC'}</button>
+          </div>
+        </form>
+      ) : (
+        <dl className="auto-facts">
+          <dt>Folder to listen to</dt>
+          <dd className="is-mono">{shown ? shown.watchFolder : <span className="is-muted">Each PC&apos;s own (normally Downloads)</span>}</dd>
+          <dt>Files to print are in</dt>
+          <dd className="is-mono">{shown ? shown.filesFolder : <span className="is-muted">Each PC&apos;s own</span>}</dd>
+          <dt>Printers</dt>
+          <dd>Chosen on each PC from its Windows printers — an A4 printer and a sticker printer</dd>
+          <dt>Test mode</dt>
+          <dd>{shown?.dryRun ? <span className="auto-state is-off">On · nothing is printed</span> : 'Off'}</dd>
+        </dl>
+      )}
+    </section>
+  )
+}
+
+/**
  * Dispatch automation: what the lab PCs print when a Grab & Go file arrives.
  * Admins write the automations here; the agent on each PC (Settings → Lab PC
  * tools) reads them from the website by itself and does the printing. "Try
  * it" runs the same matching on pasted text, right here.
  */
-export const AutomationPage = ({ site, automations, loaded, error, canEdit, uid }) => {
+export const AutomationPage = ({ site, automations, agentSettings, loaded, error, canEdit, uid }) => {
   const [editing, setEditing] = useState(null) // null | 'new' | automation
   const [actionError, setActionError] = useState('')
   const [sample, setSample] = useState('')
@@ -106,7 +197,7 @@ export const AutomationPage = ({ site, automations, loaded, error, canEdit, uid 
       <ol className="auto-how" aria-label="How it works">
         <li><Download size={16} /><span>A Grab &amp; Go file arrives in the folder a lab PC listens to</span></li>
         <li><FileText size={16} /><span>The agent reads it and finds the automation whose words are all in it</span></li>
-        <li><Printer size={16} /><span>It prints the file, the files to print from that PC, and the sticker</span></li>
+        <li><Printer size={16} /><span>It prints the file and the files to print on the PC&apos;s A4 printer, and the sticker on its sticker printer</span></li>
       </ol>
 
       {(error || actionError) && <p className="alert" role="alert"><AlertCircle size={16} /><span>{actionError || error}</span></p>}
@@ -134,6 +225,8 @@ export const AutomationPage = ({ site, automations, loaded, error, canEdit, uid 
           ))}
         </ul>
       )}
+
+      <LabPcSettings settings={agentSettings} canEdit={canEdit} onSave={values => saveAgentSettings(site.id, values, uid)} />
 
       <section className="card auto-try" aria-labelledby="try-title">
         <div className="card-head">

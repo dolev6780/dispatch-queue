@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { AlertCircle, Plus, X } from 'lucide-react'
 import { Dialog } from './Dialog'
+import { Switch } from './ui'
 import { BUILTIN_FIELDS, LIMITS, cleanAutomation, emptyAutomation, splitList, validateAutomation } from '../services/automation'
 
 const COPIES = [1, 2, 3, 4, 5]
@@ -11,16 +12,9 @@ const CopiesSelect = ({ value, onChange, label }) => (
   </select>
 )
 
-const Switch = ({ on, onChange, label }) => (
-  <button type="button" className={`switch ${on ? 'is-on' : ''}`} role="switch" aria-checked={on} aria-label={label}
-    onClick={() => onChange(!on)}>
-    <span className="switch-knob" />
-  </button>
-)
-
 /**
  * Write or edit a dispatch automation: the words that pick it, and what it
- * prints — the downloaded file, documents from the shared folder, and a
+ * prints — the downloaded file, files from the PC's files-to-print folder, and a
  * sticker whose lines are filled with details read from the file.
  */
 export const AutomationDialog = ({ automation, onSave, onClose }) => {
@@ -126,7 +120,9 @@ export const AutomationDialog = ({ automation, onSave, onClose }) => {
             <Plus size={14} /><span>Add a document</span>
           </button>
         )}
-        <span className="field-hint">Documents are files in the <code>documents</code> folder of the shared folder, by file name.</span>
+        <span className="field-hint">
+          By file name, from the folder with the files to print (<em>Lab PC settings</em>). The file and these print on the PC&apos;s A4 printer.
+        </span>
       </div>
 
       <div className="field">

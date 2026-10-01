@@ -162,3 +162,35 @@ export const builtinValues = ({ fileName, automationName, now }) => {
     automation: automationName || ''
   }
 }
+
+// ---- The site's settings for the lab-PC agents ------------------------------------
+
+/**
+ * What every lab PC at the site follows unless it sets its own folders. Paths
+ * may use Windows variables, so one value works for everyone: %USERPROFILE% is
+ * each person's own folder. The printers are not here: each PC chooses its A4
+ * printer and its sticker printer from the printers installed in Windows.
+ */
+export const AGENT_DEFAULTS = {
+  watchFolder: '%USERPROFILE%\\Downloads',
+  filesFolder: '%USERPROFILE%\\Documents\\NBLAB print files',
+  dryRun: false
+}
+
+export const cleanAgentSettings = (draft) => ({
+  watchFolder: String(draft?.watchFolder ?? '').trim().slice(0, 260),
+  filesFolder: String(draft?.filesFolder ?? '').trim().slice(0, 260),
+  dryRun: !!draft?.dryRun
+})
+
+const looksLikeWindowsFolder = (path) => /^([a-zA-Z]:\\|\\\\[^\\]+\\|%[A-Za-z_]+%)/.test(path)
+
+/** Check the settings before saving; returns an error message or null. */
+export const validateAgentSettings = (draft) => {
+  const s = cleanAgentSettings(draft)
+  if (!s.watchFolder) return 'Choose the folder to listen to.'
+  if (!looksLikeWindowsFolder(s.watchFolder)) return 'The folder to listen to should look like C:\\…, \\\\server\\…, or start with %USERPROFILE%.'
+  if (!s.filesFolder) return 'Choose the folder with the files to print.'
+  if (!looksLikeWindowsFolder(s.filesFolder)) return 'The folder with the files to print should look like C:\\…, \\\\server\\…, or start with %USERPROFILE%.'
+  return null
+}

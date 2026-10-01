@@ -436,6 +436,28 @@ await deny('a member cannot delete one', () => deleteDoc(doc(w1, ...autoOf('haif
 await allow('a site admin deletes one', () => deleteDoc(doc(wa, ...autoOf('haifa'), 'a2')))
 
 // ---------------------------------------------------------------------------
+console.log('\n--- lab PC settings ---')
+const agentPath = (site, id = 'agent') => ['sites', site, 'features', 'dispatch-automation', 'settings', id]
+const agentSettings = (by, extra) => ({
+  watchFolder: '%USERPROFILE%\\Downloads\\GrabGo', filesFolder: '%USERPROFILE%\\Documents\\NBLAB print files',
+  dryRun: false, updatedAt: serverTimestamp(), updatedBy: by, ...extra
+})
+await allow('a site admin sets the PC settings for their site', () => setDoc(doc(wa, ...agentPath('haifa')), agentSettings('wa')))
+await allow('a global admin may too', () => setDoc(doc(as('pg'), ...agentPath('haifa')), agentSettings('pg', { dryRun: true })))
+await deny('a member cannot', () => setDoc(doc(w1, ...agentPath('haifa')), agentSettings('w1')))
+await deny("another site's admin cannot", () => setDoc(doc(as('pt'), ...agentPath('haifa')), agentSettings('pt')))
+await deny('only the one settings document', () => setDoc(doc(wa, ...agentPath('haifa', 'other')), agentSettings('wa')))
+await deny('a folder path over 260 characters', () => setDoc(doc(wa, ...agentPath('haifa')), agentSettings('wa', { watchFolder: 'C:\\' + 'x'.repeat(260) })))
+await deny('test mode must be true or false', () => setDoc(doc(wa, ...agentPath('haifa')), agentSettings('wa', { dryRun: 'yes' })))
+await deny('smuggle an extra field', () => setDoc(doc(wa, ...agentPath('haifa')), agentSettings('wa', { command: 'format c:' })))
+await deny('a printer is not a site setting: each PC chooses its own', () => setDoc(doc(wa, ...agentPath('haifa')), agentSettings('wa', { stickerPrinter: 'ZDesigner ZD421' })))
+await deny('forge who changed it', () => setDoc(doc(wa, ...agentPath('haifa')), agentSettings('w1')))
+await deny('under another feature', () => setDoc(doc(wa, 'sites', 'haifa', ...FQ, 'settings', 'agent'), agentSettings('wa')))
+await allow('everyone at the site reads them', () => getDoc(doc(w1, ...agentPath('haifa'))))
+await deny('a worker at another site does not', () => getDoc(doc(as('wt'), ...agentPath('haifa'))))
+await deny('a stranger does not', () => getDoc(doc(as('stranger'), ...agentPath('haifa'))))
+
+// ---------------------------------------------------------------------------
 console.log('\n--- first-time setup on an empty database ---')
 await env.clearFirestore()
 const first = as('first')

@@ -127,6 +127,67 @@ try {
     Write-Host '  (skipped: no "Microsoft Print to PDF" printer here)'
   }
 
+  Write-Host '--- printing on the A4 printer ---'
+  Eq 'how each kind of file is printed' @((Get-PrintKind 'a.PDF'), (Get-PrintKind 'b.jpg'), (Get-PrintKind 'c.csv'), (Get-PrintKind 'd.docx')) @('pdf', 'picture', 'text', 'app')
+  if ($printers -contains 'Microsoft Print to PDF') {
+    $waitFile = {
+      param($File)
+      $deadline = (Get-Date).AddSeconds(30)
+      while (-not ((Test-Path $File) -and (Get-Item $File).Length -gt 0) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 300 }
+      Start-Sleep -Milliseconds 800
+    }
+    # A two-page PDF, made by Windows.
+    $twoPages = Join-Path $work 'ldo.pdf'
+    $job = New-PrintJob 'Microsoft Print to PDF' 'test' $twoPages
+    $pageNo = @{ n = 0 }
+    $job.add_PrintPage({
+      param($j, $e)
+      $pageNo.n++
+      $e.Graphics.DrawString("LDO form page $($pageNo.n)", (New-Object System.Drawing.Font('Arial', 20)), [System.Drawing.Brushes]::Black, 100, 100)
+      $e.HasMorePages = $pageNo.n -lt 2
+    })
+    $job.Print()
+    $job.Dispose()
+    & $waitFile $twoPages
+    Eq "Windows' own PDF reader opens it" (Open-Pdf $twoPages).PageCount 2
+    $out = Join-Path $work 'printed-pdf.pdf'
+    Invoke-PrintFile $twoPages 1 'Microsoft Print to PDF' $false $out
+    & $waitFile $out
+    Eq 'a PDF prints on the chosen printer, every page, with no PDF app' (Open-Pdf $out).PageCount 2
+
+    $textFile = Join-Path $work 'notes.txt'
+    [System.IO.File]::WriteAllText($textFile, "Grab & Go return`r`nTicket:`tRITM0012345`r`n" + ("a line of text`r`n" * 120))
+    $out = Join-Path $work 'printed-text.pdf'
+    Invoke-PrintFile $textFile 1 'Microsoft Print to PDF' $false $out
+    & $waitFile $out
+    Eq 'a text file prints as text' ((Get-FileText $out) -match 'Grab & Go return') $true
+    Eq '...on as many pages as it needs' ((Open-Pdf $out).PageCount -ge 2) $true
+
+    $png = Join-Path $work 'label.png'
+    $bmp = New-Object System.Drawing.Bitmap(600, 300)
+    $g = [System.Drawing.Graphics]::FromImage($bmp)
+    $g.Clear([System.Drawing.Color]::White)
+    $g.DrawString('PICTURE', (New-Object System.Drawing.Font('Arial', 40)), [System.Drawing.Brushes]::Black, 10, 10)
+    $g.Dispose()
+    $bmp.Save($png)
+    $bmp.Dispose()
+    $out = Join-Path $work 'printed-picture.pdf'
+    Invoke-PrintFile $png 1 'Microsoft Print to PDF' $false $out
+    & $waitFile $out
+    $printedPage = (Open-Pdf $out).GetPage(0)
+    Eq 'a picture prints; a wide one on a landscape page' ($printedPage.Size.Width -gt $printedPage.Size.Height) $true
+    Eq '...and the picture file is free again afterwards' $(Remove-Item -LiteralPath $png -ErrorAction SilentlyContinue; Test-Path -LiteralPath $png) $false
+
+    $answer = try { Invoke-PrintFile $textFile 1 'No Such Printer 123' $false ''; 'printed?!' } catch { $_.Exception.Message }
+    Eq 'a printer that is not on this PC, in words' $answer "There is no printer named 'No Such Printer 123' on this PC."
+    $odd = Join-Path $work 'thing.nblabx'
+    [System.IO.File]::WriteAllText($odd, 'x')
+    $answer = try { Invoke-PrintFile $odd 1 'Microsoft Print to PDF' $false ''; 'printed?!' } catch { $_.Exception.Message }
+    Eq 'a kind of file no app here can print, in words' $answer 'no app on this PC can print .nblabx files to a chosen printer'
+  } else {
+    Write-Host '  (skipped printing: no "Microsoft Print to PDF" printer here)'
+  }
+
   Write-Host '--- the whole plan, dry run ---'
   $files = Join-Path $work 'print files'
   New-Item -ItemType Directory -Path $files | Out-Null
@@ -138,7 +199,7 @@ try {
     sticker = $true; stickerLines = @('{ticket}', 'Asset {asset}')
     stickerFields = @([pscustomobject]@{ name = 'ticket'; label = 'Ticket' }, [pscustomobject]@{ name = 'asset'; label = 'Asset tag' })
   }) 'a1')
-  $config = @{ watchFolder = $work; filesFolder = $files; stickerPrinter = 'Label printer'; dryRun = $true }
+  $config = @{ watchFolder = $work; filesFolder = $files; a4Printer = 'Office A4'; stickerPrinter = 'Label printer'; dryRun = $true }
   $plan = Get-Plan $txt $config $automations
   Eq 'the plan: the matching automation' $plan.automation.name 'Grab & Go return'
   Eq 'the plan: the sticker lines' $plan.stickerLines @('RITM0012345', 'Asset NB-48213')
@@ -146,11 +207,16 @@ try {
   $script:LogPath = Join-Path $work 'test.log'
   Invoke-Automation $txt $config $automations
   $log = Get-Content $script:LogPath -Raw
-  Eq 'a dry run logs the file it would print' ($log -match 'would print .*return\.txt') $true
-  Eq 'a dry run logs each copy of a file to print' ([regex]::Matches($log, 'would print .*LDO\.pdf').Count) 2
+  Eq 'a dry run logs the file it would print, on the A4 printer' ($log -match "would print .*return\.txt on 'Office A4'") $true
+  Eq 'a dry run logs each copy of a file to print' ([regex]::Matches($log, "would print .*LDO\.pdf on 'Office A4'").Count) 2
   Eq 'a dry run logs the sticker' ($log -match "sticker on 'Label printer': RITM0012345 \| Asset NB-48213") $true
   Eq 'a missing file to print is reported, not fatal' ($log -match 'PROBLEM: Missing\.pdf is not in') $true
   Eq 'a file that matches nothing is only logged' ((Get-Plan $csvFile $config $automations).automation) $null
+  Remove-Item -LiteralPath $script:LogPath
+  Invoke-Automation $txt @{ watchFolder = $work; filesFolder = $files; a4Printer = ''; stickerPrinter = ''; dryRun = $true } $automations
+  $log = Get-Content $script:LogPath -Raw
+  Eq 'no A4 printer chosen: said once, nothing printed on paper' ([regex]::Matches($log, 'PROBLEM: no A4 printer is chosen on this PC').Count) 1
+  Eq 'no sticker printer chosen: said too' ($log -match 'PROBLEM: no sticker printer is chosen on this PC') $true
 
   Write-Host '--- automations read from the website ---'
   $rest = '{"name":"projects/p/databases/(default)/documents/sites/l12/features/dispatch-automation/automations/a7","fields":{"name":{"stringValue":"Return"},"enabled":{"booleanValue":true},"keywords":{"arrayValue":{"values":[{"stringValue":"Grab & Go"}]}},"fileTypes":{"arrayValue":{}},"printFile":{"booleanValue":false},"fileCopies":{"integerValue":"9"},"documents":{"arrayValue":{"values":[{"mapValue":{"fields":{"file":{"stringValue":"LDO.pdf"},"copies":{"integerValue":"2"}}}}]}},"sticker":{"booleanValue":true},"stickerLines":{"arrayValue":{"values":[{"stringValue":"{ticket}"}]}},"stickerFields":{"arrayValue":{"values":[{"mapValue":{"fields":{"name":{"stringValue":"ticket"},"label":{"stringValue":"Ticket"}}}}]}},"updatedAt":{"timestampValue":"2026-10-01T09:00:00.123456Z"}}}' | ConvertFrom-Json
@@ -165,6 +231,43 @@ try {
   $me = ConvertFrom-FirestoreFields (('{"siteId":{"stringValue":"l12"},"tempSiteId":{"stringValue":"l9"},"tempEndsAt":{"timestampValue":"2026-10-05T00:00:00Z"}}') | ConvertFrom-Json)
   Eq 'the current site: away on a temporary move' (Get-CurrentSite $me ([datetime]'2026-10-01T10:00:00Z')) 'l9'
   Eq 'the current site: home again once it ends' (Get-CurrentSite $me ([datetime]'2026-10-06T10:00:00Z')) 'l12'
+
+  Write-Host "--- the site's Lab PC settings ---"
+  $siteRest = '{"name":"projects/p/databases/(default)/documents/sites/l12/features/dispatch-automation/settings/agent","fields":{"watchFolder":{"stringValue":"%USERPROFILE%\\GrabGo"},"filesFolder":{"stringValue":"\\\\lab-server\\print"},"stickerPrinter":{"stringValue":"ZDesigner ZD421"},"dryRun":{"booleanValue":true},"updatedBy":{"stringValue":"u1"},"updatedAt":{"timestampValue":"2026-10-01T09:00:00Z"}}}' | ConvertFrom-Json
+  $site = ConvertTo-SiteSettings (ConvertFrom-FirestoreFields $siteRest.fields)
+  Eq 'the site settings from the website' @($site.watchFolder, $site.filesFolder, $site.dryRun) @('%USERPROFILE%\GrabGo', '\\lab-server\print', $true)
+  Eq '...never a printer: each PC chooses its own' $site.ContainsKey('stickerPrinter') $false
+  Eq 'none set on the website yet' (ConvertTo-SiteSettings $null) $null
+  Eq 'a missing document, in words' (Get-FirebaseErrorMessage '{"error":{"code":404,"message":"Document x was not found.","status":"NOT_FOUND"}}') 'Not found.'
+  $defaults = Get-DefaultFolders
+  $blank = @{ watchFolder = ''; filesFolder = ''; a4Printer = ''; stickerPrinter = ''; dryRun = $false }
+  $none = Get-EffectiveSettings $blank $null
+  Eq 'nothing set anywhere: the default folders, no printers yet' @($none.watchFolder, $none.filesFolder, $none.a4Printer, $none.stickerPrinter, $none.dryRun) @($defaults.watchFolder, $defaults.filesFolder, '', '', $false)
+  $fromSite = Get-EffectiveSettings $blank $site
+  Eq "the site's settings, %USERPROFILE% as this user's folder" @($fromSite.watchFolder, $fromSite.filesFolder, $fromSite.dryRun) @((Join-Path $env:USERPROFILE 'GrabGo'), '\\lab-server\print', $true)
+  Eq '...and where each one came from' @($fromSite.from.watchFolder, $fromSite.from.filesFolder, $fromSite.from.dryRun) @('the site', 'the site', 'the site')
+  $own = Get-EffectiveSettings @{ watchFolder = 'D:\In'; filesFolder = ''; a4Printer = 'HP A4'; stickerPrinter = 'Brother QL'; dryRun = $false } $site
+  Eq "this PC's own folder and its two printers, the rest from the site" @($own.watchFolder, $own.filesFolder, $own.a4Printer, $own.stickerPrinter, $own.from.watchFolder) @('D:\In', '\\lab-server\print', 'HP A4', 'Brother QL', 'this PC')
+  Eq 'test mode: on when this PC turns it on' (Get-EffectiveSettings @{ dryRun = $true } $null).dryRun $true
+  Eq 'test mode: on when the site turns it on' (Get-EffectiveSettings $blank @{ dryRun = $true }).dryRun $true
+  Eq 'the printers in words' @((Format-EffectiveSettings $own)[2], (Format-EffectiveSettings $own)[3], (Format-EffectiveSettings $none)[2]) @('A4 printer: HP A4', 'Sticker printer: Brother QL', 'A4 printer: (not chosen)')
+  $script:LogPath = Join-Path $work 'test.log'
+  $made = @{ watchFolder = (Join-Path $work 'from-site\grab-go'); wanted = @{} }
+  Resolve-AgentFolder $made 'watchFolder'
+  Eq "a site folder missing on this PC is made" (Test-Path -LiteralPath $made.watchFolder -PathType Container) $true
+  $bad = @{ watchFolder = 'C:\bad<name>'; wanted = @{} }
+  Resolve-AgentFolder $bad 'watchFolder'
+  Eq 'a folder that cannot be used falls back to the default' $bad.watchFolder $defaults.watchFolder
+  Eq '...remembering what was asked for, to not warn again' $bad.wanted.watchFolder 'C:\bad<name>'
+  $saved = @{ site = 'l12'; person = 'Dana'; automations = @($fromWeb); settings = $site } | ConvertTo-Json -Depth 8 | ConvertFrom-Json
+  $again = ConvertFrom-SavedAutomations $saved 'saved copy'
+  Eq 'the saved copy keeps the automations and the site settings' @($again.site, $again.automations[0].id, $again.settings.filesFolder, $again.settings.dryRun) @('l12', 'a7', '\\lab-server\print', $true)
+  $ConfigPath = Join-Path $work 'settings.json'
+  @{ watchFolder = $defaults.watchFolder; filesFolder = 'E:\Forms'; stickerPrinter = 'Zebra'; dryRun = $false; startAtSignIn = $true; email = 'a@nblab.local'; refreshToken = 'x' } |
+    ConvertTo-Json | Set-Content -LiteralPath $ConfigPath -Encoding UTF8
+  $migrated = Get-AgentConfig
+  Eq 'a PC set up before 2.2 with the default folder now follows the site' @($migrated.watchFolder, $migrated.filesFolder) @('', 'E:\Forms')
+  Eq '...keeps its sticker printer, and still has to choose the A4 printer' @($migrated.stickerPrinter, $migrated.a4Printer) @('Zebra', '')
 
   Write-Host '--- signing in (the same as the website) ---'
   Eq 'the credentials match the website' (Get-WorkIdCredentials '4471') @{ email = '4471@nblab.local'; password = '7151242b4b3ae3938e73ec7cc7e658c5' }
@@ -203,12 +306,73 @@ try {
   Eq 'turning it off removes the shortcut' (Test-Path -LiteralPath $link) $false
 
   Write-Host '--- the setup window ---'
-  $form = New-SetupForm @{ watchFolder = 'C:\In'; filesFolder = 'C:\Print'; stickerPrinter = 'Not a printer'; startAtSignIn = $false; email = '4471@nblab.local'; refreshToken = 'x'; dryRun = $false }
+  $installed = @([System.Drawing.Printing.PrinterSettings]::InstalledPrinters)
+  $somePrinter = $installed[0]
+  $form = New-SetupForm @{ watchFolder = 'C:\In'; filesFolder = 'C:\Print'; a4Printer = $somePrinter; stickerPrinter = 'Not a printer'; startAtSignIn = $false; email = '4471@nblab.local'; refreshToken = 'x'; dryRun = $false }
   Eq 'it shows the saved folders' @($form.controls.watchFolder.Text, $form.controls.filesFolder.Text) @('C:\In', 'C:\Print')
-  Eq 'an unknown sticker printer falls back to none' $form.controls.stickerPrinter.SelectedIndex 0
+  Eq 'both printers are chosen from the printers in Windows' @($form.controls.a4Printer.Items.Count, $form.controls.stickerPrinter.Items.Count) @(($installed.Count + 1), ($installed.Count + 1))
+  Eq 'it shows the saved A4 printer' ([string]$form.controls.a4Printer.SelectedItem) $somePrinter
+  Eq 'a sticker printer no longer on this PC is to be chosen again' ([string]$form.controls.stickerPrinter.SelectedItem) '(choose a printer)'
   Eq 'it says who is signed in' ($form.controls.signedIn.Text -match '^Signed in as 4471') $true
   Eq 'the work ID box hides what is typed' $form.controls.workId.UseSystemPasswordChar $true
   $form.form.Dispose()
+  $form = New-SetupForm @{ watchFolder = ''; filesFolder = ''; a4Printer = ''; stickerPrinter = ''; startAtSignIn = $true; email = ''; refreshToken = ''; dryRun = $false } $site
+  Eq "empty folders: it says they follow the site's" @($form.controls.watchFolder.Text, $form.controls.watchFolderHint.Text) @('', "Empty: the site's - $(Join-Path $env:USERPROFILE 'GrabGo')")
+  $form.form.Dispose()
+  $form = New-SetupForm $null $null
+  Eq 'the first time: empty, falling back to Downloads' @($form.controls.watchFolder.Text, ($form.controls.watchFolderHint.Text -like '*else*Downloads')) @('', $true)
+  Eq '...the A4 printer suggested: the Windows default' ([string]$form.controls.a4Printer.SelectedItem) (Get-DefaultPrinter)
+  Eq '...the sticker printer still to be chosen' $form.controls.stickerPrinter.SelectedIndex 0
+  $form.form.Dispose()
+
+  Write-Host '--- updating itself ---'
+  Eq 'not built for the website: no update check' (Get-AgentUpdate) $null
+  $node = Get-Command node -ErrorAction SilentlyContinue
+  if ($node) {
+    # The agent exactly as the website publishes it (vite.config.js).
+    $builder = Join-Path $work 'build.mjs'
+    $viteConfig = ([uri](Resolve-Path (Join-Path $PSScriptRoot '..\vite.config.js')).Path).AbsoluteUri
+    [System.IO.File]::WriteAllText($builder, "import { agentCmd } from '$viteConfig'`nimport { writeFileSync } from 'node:fs'`nwriteFileSync(process.argv[2], agentCmd({ VITE_FIREBASE_API_KEY: 'AIzaTestKey0123456789', VITE_FIREBASE_PROJECT_ID: 'demo-nblab', VITE_AGENT_UPDATE_URL: 'https://example.invalid/nblab-automation.cmd' }))`n")
+    $built = Join-Path $work 'built.cmd'
+    & $node.Source $builder $built
+    $builtText = [System.IO.File]::ReadAllText($built)
+    Eq 'the published agent carries its version' ([string](Get-ScriptVersion $builtText)) $AgentVersion
+    Eq '...knows where to update from' ([regex]::Match($builtText, "(?m)^\`$UpdateUrl = '([^']*)'").Groups[1].Value) 'https://example.invalid/nblab-automation.cmd'
+    Eq '...and passes the check' (Test-AgentScript $builtText) ''
+    Eq 'a web page is not the agent' (Test-AgentScript ('<!doctype html><html>' + ('x' * 30000))) 'not the agent'
+    $cut = $builtText.Substring(0, $builtText.IndexOf('while (-not $script:Stop)') + 40)
+    Eq 'a cut-off download is refused' (Test-AgentScript $cut) 'damaged'
+    Eq 'one without a version is refused' (Test-AgentScript ($builtText -replace "(?m)^\`$AgentVersion = '[^']*'", '$AgentVersion = $null')) 'no version'
+    Eq 'one built without the website settings is refused' (Test-AgentScript ("<# :`r`n#>`r`n" + [System.IO.File]::ReadAllText((Join-Path $PSScriptRoot 'nblab-automation.ps1')))) 'not built for the website'
+
+    $withVersion = { param([string]$Version) $builtText -replace "(?m)^\`$AgentVersion = '[^']*'", "`$AgentVersion = '$Version'" }
+    $newer = Join-Path $work 'newer.cmd'
+    [System.IO.File]::WriteAllText($newer, (& $withVersion '9.9.9'))
+    $older = Join-Path $work 'older.cmd'
+    [System.IO.File]::WriteAllText($older, (& $withVersion '1.0.0'))
+    $broken = Join-Path $work 'broken.cmd'
+    [System.IO.File]::WriteAllText($broken, '<!doctype html><title>404</title>' + ('x' * 30000))
+    try {
+      $env:NBLAB_UPDATE_URL = ([uri]$newer).AbsoluteUri
+      $update = Get-AgentUpdate
+      Eq 'a newer version on the website is found' ([string]$update.version) '9.9.9'
+      $kept = Join-Path $work 'kept\nblab-automation.cmd'
+      Save-AgentUpdate $update $kept
+      Eq '...and saved, whole, where it starts from' ([System.IO.File]::ReadAllText($kept)) ([System.IO.File]::ReadAllText($newer))
+      Eq '...with nothing left over' (Test-Path -LiteralPath "$kept.new") $false
+      $env:NBLAB_UPDATE_URL = ([uri]$built).AbsoluteUri
+      Eq 'the same version: nothing to do' (Get-AgentUpdate) $null
+      $env:NBLAB_UPDATE_URL = ([uri]$older).AbsoluteUri
+      Eq 'an older version: nothing to do' (Get-AgentUpdate) $null
+      $env:NBLAB_UPDATE_URL = ([uri]$broken).AbsoluteUri
+      $answer = try { Get-AgentUpdate | Out-Null; 'accepted' } catch { $_.Exception.Message }
+      Eq 'a broken download is refused, keeping this version' $answer 'The agent on the website looks wrong (not the agent); keeping this one.'
+    } finally {
+      Remove-Item Env:NBLAB_UPDATE_URL -ErrorAction SilentlyContinue
+    }
+  } else {
+    Write-Host '  (skipped: no Node.js here to build the published agent)'
+  }
 } finally {
   Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
 }

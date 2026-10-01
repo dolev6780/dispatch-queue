@@ -27,6 +27,7 @@ import { useDispatchQueue } from './hooks/useDispatchQueue'
 import { useJobs } from './hooks/useJobs'
 import { useProcesses } from './hooks/useProcesses'
 import { useAutomations } from './hooks/useAutomations'
+import { useAgentSettings } from './hooks/useAgentSettings'
 import { useServiceNowBridge } from './hooks/useServiceNowBridge'
 import { useServiceNowRelay } from './hooks/useServiceNowRelay'
 import { useRelayInfo } from './hooks/useRelayInfo'
@@ -316,6 +317,7 @@ function App() {
   // follows the live job, so ticks from another station show up here too.
   const workProcesses = useProcesses({ siteId: activeSiteId, canRead: canUse })
   const dispatchAutomations = useAutomations({ siteId: activeSiteId, canRead: canUse })
+  const agentSettings = useAgentSettings({ siteId: activeSiteId, canRead: canUse })
 
   // Unassigned ServiceNow tasks: from the main PC's relay when this page was
   // opened from it, otherwise from the watcher in this browser (if any).
@@ -540,6 +542,7 @@ function App() {
         key={activeSiteId}
         site={site}
         automations={dispatchAutomations.automations}
+        agentSettings={agentSettings}
         loaded={dispatchAutomations.loaded}
         error={dispatchAutomations.error}
         canEdit={isSiteAdminHere}

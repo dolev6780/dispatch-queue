@@ -5,19 +5,25 @@
 .DESCRIPTION
   Listens to one folder on this PC. When a file finishes arriving there, it
   reads the text inside the file, finds the first automation whose words are
-  ALL in it, and prints what that automation says: the file itself, files from
-  this PC's print-files folder (the LDO form etc.), and a sticker on the sticker
-  printer with details read from the file.
+  ALL in it, and prints what that automation says: the file itself and files
+  from the print-files folder (the LDO form etc.) on this PC's A4 printer, and
+  a sticker with details read from the file on its sticker printer. Each PC
+  chooses its two printers from the printers installed in Windows.
 
   The automations are written on the NBLAB website (Automation page). The agent
   signs in once with a work ID and reads them from there by itself, so a change
-  on the website reaches every PC. Nothing is sent anywhere else.
+  on the website reaches every PC. So do the site's Lab PC settings - the folder
+  to listen to, the folder with the files to print, and test mode - unless this
+  PC sets its own folders. Nothing is sent anywhere else.
 
   It is published as nblab-automation.cmd: double-click it. The first time, a
-  window asks for a work ID, the folder to listen to, the folder with the files
-  to print, and the sticker printer. Settings, the sign-in and the log are kept
-  in %LOCALAPPDATA%\NBLAB\automation. The work ID itself is never stored; the
+  window asks for a work ID and the two printers (and, optionally, this PC's
+  own folders). Settings, the sign-in and the log are kept in
+  %LOCALAPPDATA%\NBLAB\automation. The work ID itself is never stored; the
   sign-in is kept encrypted for this Windows user only.
+
+  It updates itself: when the website has a newer nblab-automation.cmd, it
+  downloads it, checks it, and restarts with it.
 
 .EXAMPLE
   nblab-automation.cmd
@@ -47,14 +53,18 @@ $ErrorActionPreference = 'Stop'
 # Google's servers need TLS 1.2, which Windows PowerShell 5.1 does not use by default.
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-$AgentVersion = '2.1.0'
+# Raise it with every change: the PCs update themselves to a newer version.
+$AgentVersion = '2.2.0'
 # Filled in when the website is built (vite.config.js) with the same public
-# Firebase settings the website uses.
+# Firebase settings the website uses, and where the website publishes this file.
 $FirebaseApiKey = '__NBLAB_FIREBASE_API_KEY__'
 $FirebaseProject = '__NBLAB_FIREBASE_PROJECT_ID__'
+$UpdateUrl = '__NBLAB_UPDATE_URL__'
 $EmailDomain = 'nblab.local'
 
-$DataFolder = Join-Path $env:LOCALAPPDATA 'NBLAB\automation'
+# NBLAB_DATA_FOLDER: a separate agent for testing, with its own settings.
+$DataFolder = if ($env:NBLAB_DATA_FOLDER) { $env:NBLAB_DATA_FOLDER } else { Join-Path $env:LOCALAPPDATA 'NBLAB\automation' }
+$MutexName = if ($env:NBLAB_DATA_FOLDER) { 'NBLAB-dispatch-automation-' + [Math]::Abs($env:NBLAB_DATA_FOLDER.ToLowerInvariant().GetHashCode()) } else { 'NBLAB-dispatch-automation' }
 $ConfigPath = Join-Path $DataFolder 'settings.json'
 $LogPath = Join-Path $DataFolder 'automation.log'
 $CachePath = Join-Path $DataFolder 'automations-cache.json'
@@ -411,7 +421,9 @@ function Get-WorkIdCredentials([string]$WorkId) {
 
 function Get-FirebaseErrorMessage([string]$Body) {
   $code = ''
-  try { $code = [string]((ConvertFrom-Json $Body).error.message) } catch { }
+  $status = ''
+  try { $err = (ConvertFrom-Json $Body).error; $code = [string]$err.message; $status = [string](Get-Prop $err 'status') } catch { }
+  if ($status -eq 'NOT_FOUND') { return 'Not found.' }
   if ($code -match 'INVALID_LOGIN_CREDENTIALS|INVALID_PASSWORD|EMAIL_NOT_FOUND|INVALID_EMAIL') { return 'That work ID was not recognised.' }
   if ($code -match 'USER_DISABLED') { return 'This account is disabled.' }
   if ($code -match 'TOO_MANY_ATTEMPTS') { return 'Too many attempts. Wait a moment and try again.' }
@@ -512,40 +524,192 @@ function Get-WebsiteAutomations($Config) {
   $automations = @(foreach ($doc in @(Get-Prop $list 'documents')) {
     if ($doc) { ConvertTo-Automation (ConvertFrom-FirestoreFields (Get-Prop $doc 'fields')) (([string]$doc.name) -split '/')[-1] }
   }) | Sort-Object name
-  return @{ site = $site; person = [string](Get-Prop $me 'name'); automations = @($automations) }
+  # The site's Lab PC settings; not there until an admin sets them.
+  $settings = $null
+  try {
+    $settings = ConvertTo-SiteSettings (ConvertFrom-FirestoreFields (Get-Prop (Invoke-Firebase 'Get' "$base/sites/$site/features/dispatch-automation/settings/agent" $null 'application/json' $headers) 'fields'))
+  } catch {
+    if ($_.Exception.Message -ne 'Not found.') { throw }
+  }
+  return @{ site = $site; person = [string](Get-Prop $me 'name'); automations = @($automations); settings = $settings }
 }
 
+function ConvertTo-SiteSettings($Object) {
+  # The website's Lab PC settings (src/services/automation.js cleanAgentSettings).
+  if ($null -eq $Object) { return $null }
+  return @{
+    watchFolder = [string](Get-Prop $Object 'watchFolder')
+    filesFolder = [string](Get-Prop $Object 'filesFolder')
+    dryRun = ((Get-Prop $Object 'dryRun') -eq $true)
+  }
+}
+
+function ConvertFrom-SavedAutomations($Data, [string]$From) {
+  return @{
+    site = [string](Get-Prop $Data 'site')
+    person = [string](Get-Prop $Data 'person')
+    from = $From
+    automations = @(foreach ($a in @(Get-Prop $Data 'automations')) { if ($a) { ConvertTo-Automation $a ([string](Get-Prop $a 'id')) } })
+    settings = ConvertTo-SiteSettings (Get-Prop $Data 'settings')
+  }
+}
+
+$script:LastWebsiteProblem = ''
 function Get-Automations($Config) {
   # The website first; if it cannot be reached, the copy from the last time it could.
   if ($env:NBLAB_AUTOMATIONS_FILE) {
     # For testing without signing in.
-    $data = [System.IO.File]::ReadAllText($env:NBLAB_AUTOMATIONS_FILE) | ConvertFrom-Json
-    return @{ site = 'test'; person = ''; from = 'file'; automations = @(foreach ($a in @($data.automations)) { ConvertTo-Automation $a ([string](Get-Prop $a 'id')) }) }
+    $loaded = ConvertFrom-SavedAutomations ([System.IO.File]::ReadAllText($env:NBLAB_AUTOMATIONS_FILE) | ConvertFrom-Json) 'file'
+    if (-not $loaded.site) { $loaded.site = 'test' }
+    return $loaded
   }
   try {
     $fresh = Get-WebsiteAutomations $Config
     $fresh.from = 'website'
-    @{ site = $fresh.site; person = $fresh.person; automations = $fresh.automations } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $CachePath -Encoding UTF8
+    $script:LastWebsiteProblem = ''
+    @{ site = $fresh.site; person = $fresh.person; automations = $fresh.automations; settings = $fresh.settings } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $CachePath -Encoding UTF8
     return $fresh
   } catch {
     $problem = $_.Exception.Message
     if (Test-Path -LiteralPath $CachePath) {
-      $cached = [System.IO.File]::ReadAllText($CachePath) | ConvertFrom-Json
-      Write-AgentLog "Using the saved automations ($problem)"
-      return @{ site = [string]$cached.site; person = [string]$cached.person; from = 'saved copy'; automations = @(foreach ($a in @($cached.automations)) { ConvertTo-Automation $a ([string](Get-Prop $a 'id')) }) }
+      if ($problem -ne $script:LastWebsiteProblem) { Write-AgentLog "Using the saved automations ($problem)" }
+      $script:LastWebsiteProblem = $problem
+      return ConvertFrom-SavedAutomations ([System.IO.File]::ReadAllText($CachePath) | ConvertFrom-Json) 'saved copy'
     }
     throw $problem
   }
 }
 
+# ---- What this PC follows: its own settings, else the site's, else the defaults ----
+
+function Get-DefaultFolders {
+  return @{
+    watchFolder = (Join-Path $env:USERPROFILE 'Downloads')
+    filesFolder = (Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'NBLAB print files')
+  }
+}
+
+function Get-EffectiveSettings($Config, $Site) {
+  # Folders: a value set on this PC wins; then the site's (from the website);
+  # then the default. %USERPROFILE% and the like become this user's folders.
+  # The two printers are always this PC's own. Test mode is on if either this
+  # PC or the site turns it on.
+  $defaults = Get-DefaultFolders
+  $out = @{ from = @{} }
+  foreach ($key in @('watchFolder', 'filesFolder')) {
+    $own = if ($Config -and $Config.ContainsKey($key)) { ([string]$Config[$key]).Trim() } else { '' }
+    $siteValue = if ($Site -and $Site.ContainsKey($key)) { ([string]$Site[$key]).Trim() } else { '' }
+    if ($own) { $out[$key] = $own; $out.from[$key] = 'this PC' }
+    elseif ($siteValue) { $out[$key] = $siteValue; $out.from[$key] = 'the site' }
+    else { $out[$key] = $defaults[$key]; $out.from[$key] = 'default' }
+    $out[$key] = [Environment]::ExpandEnvironmentVariables($out[$key])
+  }
+  foreach ($key in @('a4Printer', 'stickerPrinter')) {
+    $out[$key] = if ($Config -and $Config.ContainsKey($key)) { ([string]$Config[$key]).Trim() } else { '' }
+    $out.from[$key] = 'this PC'
+  }
+  $out.dryRun = ($Config -and [bool]$Config.dryRun) -or ($Site -and [bool]$Site.dryRun)
+  $out.from.dryRun = if ($Config -and [bool]$Config.dryRun) { 'this PC' } elseif ($Site -and [bool]$Site.dryRun) { 'the site' } else { 'default' }
+  return $out
+}
+
+function Resolve-AgentFolder($Settings, [string]$Key) {
+  # A folder from the website may not exist on this PC yet: make it, or fall
+  # back to the default one. What was asked for is kept, so the same problem
+  # is not reported again on every refresh.
+  $Settings.wanted[$Key] = $Settings[$Key]
+  try {
+    # Test-Path itself throws on characters Windows does not allow.
+    if (Test-Path -LiteralPath $Settings[$Key] -PathType Container) { return }
+    New-Item -ItemType Directory -Force -Path $Settings[$Key] | Out-Null
+  } catch {
+    $fallback = (Get-DefaultFolders)[$Key]
+    Write-AgentLog "PROBLEM: cannot use $($Settings[$Key]) ($($_.Exception.Message)); using $fallback"
+    Show-Notice 'NBLAB automation' "Cannot use $($Settings[$Key]) - using $fallback instead." 'Warning'
+    $Settings[$Key] = $fallback
+    New-Item -ItemType Directory -Force -Path $fallback | Out-Null
+  }
+}
+
+function Format-EffectiveSettings($Settings) {
+  $a4 = if ($Settings.a4Printer) { $Settings.a4Printer } else { '(not chosen)' }
+  $sticker = if ($Settings.stickerPrinter) { $Settings.stickerPrinter } else { '(not chosen)' }
+  $test = if ($Settings.dryRun) { 'ON - nothing is printed' } else { 'off' }
+  return @(
+    "Folder to listen to: $($Settings.watchFolder) ($($Settings.from.watchFolder))"
+    "Files to print are in: $($Settings.filesFolder) ($($Settings.from.filesFolder))"
+    "A4 printer: $a4"
+    "Sticker printer: $sticker"
+    "Test mode: $test ($($Settings.from.dryRun))"
+  )
+}
+
+# ---- Updating itself ---------------------------------------------------------------------------
+
+function Get-ScriptVersion([string]$Text) {
+  $m = [regex]::Match($Text, "(?m)^\`$AgentVersion = '(\d+(\.\d+){1,3})'")
+  if ($m.Success) { return [version]$m.Groups[1].Value }
+  return $null
+}
+
+function Test-AgentScript([string]$Text) {
+  # Is this a whole, working copy of the agent? Returns what is wrong, or ''.
+  if ($Text.Length -lt 20000 -or $Text.Length -gt 3000000) { return 'not the agent (size)' }
+  if (-not $Text.TrimStart([char]0xFEFF).StartsWith('<# :')) { return 'not the agent' }
+  if (-not (Get-ScriptVersion $Text)) { return 'no version' }
+  if (-not [regex]::IsMatch($Text, '(?m)^\$FirebaseApiKey = ''(?!__)[A-Za-z0-9_\-]{10,}''')) { return 'not built for the website' }
+  $errors = $null
+  [void][System.Management.Automation.Language.Parser]::ParseInput($Text, [ref]$null, [ref]$errors)
+  if ($errors -and $errors.Count) { return 'damaged' }
+  return ''
+}
+
+function Get-AgentUpdate {
+  # The agent on the website, when it is newer than this one; otherwise $null.
+  $url = if ($env:NBLAB_UPDATE_URL) { $env:NBLAB_UPDATE_URL } else { $UpdateUrl }
+  if (-not $url -or $url.StartsWith('__')) { return $null }
+  # Past any cache, so a new version is seen at once.
+  if ($url -match '^https?://') { $url += $(if ($url.Contains('?')) { '&' } else { '?' }) + 'v=' + [DateTime]::UtcNow.Ticks }
+  $client = New-Object System.Net.WebClient
+  if ($client.Proxy) { $client.Proxy.Credentials = [System.Net.CredentialCache]::DefaultNetworkCredentials }
+  try { $bytes = $client.DownloadData($url) } finally { $client.Dispose() }
+  $text = [System.Text.Encoding]::UTF8.GetString($bytes)
+  $problem = Test-AgentScript $text
+  if ($problem) { throw "The agent on the website looks wrong ($problem); keeping this one." }
+  $version = Get-ScriptVersion $text
+  if ($version -le [version]$AgentVersion) { return $null }
+  return @{ version = $version; bytes = $bytes }
+}
+
+function Save-AgentUpdate($Update, [string]$Path) {
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $Path) | Out-Null
+  $temp = "$Path.new"
+  [System.IO.File]::WriteAllBytes($temp, $Update.bytes)
+  Move-Item -LiteralPath $temp -Destination $Path -Force
+}
+
+function Start-AgentCopy([string]$Path, [hashtable]$Environment = @{}) {
+  # Like double-clicking it, but straight to the hidden agent: no console window.
+  $info = New-Object System.Diagnostics.ProcessStartInfo 'powershell.exe'
+  $info.Arguments = '-NoProfile -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create([IO.File]::ReadAllText($env:NBLAB_SELF))) -Self $env:NBLAB_SELF"'
+  $info.CreateNoWindow = $true
+  $info.UseShellExecute = $false
+  $info.EnvironmentVariables['NBLAB_SELF'] = $Path
+  foreach ($key in $Environment.Keys) { $info.EnvironmentVariables[$key] = [string]$Environment[$key] }
+  return [System.Diagnostics.Process]::Start($info)
+}
+
 # ---- Settings, log, notices --------------------------------------------------------------
 
 function Get-AgentConfig {
+  # This PC's own settings. An empty folder or printer means: as the site sets
+  # it on the website.
   if (-not (Test-Path -LiteralPath $ConfigPath)) { return $null }
   $saved = [System.IO.File]::ReadAllText($ConfigPath) | ConvertFrom-Json
   $config = @{
-    watchFolder = (Join-Path $env:USERPROFILE 'Downloads')
-    filesFolder = (Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'NBLAB print files')
+    watchFolder = ''
+    filesFolder = ''
+    a4Printer = ''
     stickerPrinter = ''
     dryRun = $false
     startAtSignIn = $true
@@ -555,6 +719,11 @@ function Get-AgentConfig {
   foreach ($key in @($config.Keys)) {
     $value = Get-Prop $saved $key
     if ($null -ne $value -and "$value" -ne '') { $config[$key] = $value }
+  }
+  # Before 2.2 every PC saved the default folders; those now follow the site.
+  $defaults = Get-DefaultFolders
+  foreach ($key in @('watchFolder', 'filesFolder')) {
+    if ([string]$config[$key] -eq $defaults[$key]) { $config[$key] = '' }
   }
   return $config
 }
@@ -608,7 +777,15 @@ function Set-StartAtSignIn([bool]$On, [string]$Link = '') {
 
 # ---- The setup window ----------------------------------------------------------------------
 
-function New-SetupForm($Config) {
+function Get-SiteHint($Site, [string]$Key) {
+  # What an empty box means on this PC, for the setup window.
+  $value = if ($Site) { [string]$Site[$Key] } else { '' }
+  if ($value) { return "Empty: the site's - " + [Environment]::ExpandEnvironmentVariables($value) }
+  $defaults = Get-DefaultFolders
+  return "Empty: the site's setting from the website, else " + $defaults[$Key]
+}
+
+function New-SetupForm($Config, $Site = $null) {
   Add-Type -AssemblyName System.Windows.Forms
   Add-Type -AssemblyName System.Drawing
   [System.Windows.Forms.Application]::EnableVisualStyles()
@@ -620,7 +797,7 @@ function New-SetupForm($Config) {
   $form.MaximizeBox = $false
   $form.MinimizeBox = $false
   $form.StartPosition = 'CenterScreen'
-  $form.ClientSize = New-Object System.Drawing.Size(560, 420)
+  $form.ClientSize = New-Object System.Drawing.Size(560, 504)
   $form.TopMost = $true
 
   $y = 16
@@ -633,8 +810,9 @@ function New-SetupForm($Config) {
   }
   $script:SetupY = $y
   $title = New-Object System.Windows.Forms.Label
-  $title.Text = 'When a file arrives in the folder below, this PC prints what its automation on the NBLAB website says.'
-  [void](& $add $title 16 528 36)
+  $title.Text = 'When a file arrives in the folder to listen to, this PC prints what its automation on the NBLAB website says: files on the A4 printer, stickers on the sticker printer. The folders can stay empty to follow the site''s Lab PC settings on the website.'
+  [void](& $add $title 16 528 52)
+  $script:SetupY += 16
 
   $controls = @{}
   $row = {
@@ -662,6 +840,15 @@ function New-SetupForm($Config) {
     $box = New-Object System.Windows.Forms.TextBox
     $box.Text = $Value
     & $row $Caption $box 300
+    $hint = New-Object System.Windows.Forms.Label
+    $hint.Text = Get-SiteHint $Site $Key
+    $hint.ForeColor = [System.Drawing.Color]::DimGray
+    $hint.Font = New-Object System.Drawing.Font('Segoe UI', 8)
+    $hint.AutoEllipsis = $true
+    $hint.Location = New-Object System.Drawing.Point(148, ($script:SetupY + 25))
+    $hint.Size = New-Object System.Drawing.Size(396, 16)
+    $form.Controls.Add($hint)
+    $controls[$Key + 'Hint'] = $hint
     $browse = New-Object System.Windows.Forms.Button
     $browse.Text = 'Browse...'
     $browse.Location = New-Object System.Drawing.Point(456, ($script:SetupY - 1))
@@ -670,25 +857,39 @@ function New-SetupForm($Config) {
     $browse.Add_Click({
       param($button)
       $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
-      $dialog.SelectedPath = $button.Tag.Text
+      if ($button.Tag.Text) { $dialog.SelectedPath = [Environment]::ExpandEnvironmentVariables($button.Tag.Text) }
       if ($dialog.ShowDialog() -eq 'OK') { $button.Tag.Text = $dialog.SelectedPath }
     })
     $form.Controls.Add($browse)
     $controls[$Key] = $box
   }
-  $watch = if ($Config) { $Config.watchFolder } else { Join-Path $env:USERPROFILE 'Downloads' }
-  $files = if ($Config) { $Config.filesFolder } else { Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'NBLAB print files' }
-  & $folderRow 'Folder to listen to' $watch 'watchFolder'
-  & $folderRow 'Files to print are in' $files 'filesFolder'
-
-  $controls.stickerPrinter = New-Object System.Windows.Forms.ComboBox
-  $controls.stickerPrinter.DropDownStyle = 'DropDownList'
-  [void]$controls.stickerPrinter.Items.Add('(no sticker printer)')
-  foreach ($printer in [System.Drawing.Printing.PrinterSettings]::InstalledPrinters) { [void]$controls.stickerPrinter.Items.Add($printer) }
-  $current = if ($Config -and $Config.stickerPrinter) { $Config.stickerPrinter } else { '(no sticker printer)' }
-  $controls.stickerPrinter.SelectedItem = $current
-  if ($controls.stickerPrinter.SelectedIndex -lt 0) { $controls.stickerPrinter.SelectedIndex = 0 }
+  # The two printers, from the printers installed in Windows.
+  $installed = @([System.Drawing.Printing.PrinterSettings]::InstalledPrinters)
+  $printerBox = {
+    param([string]$Current)
+    $box = New-Object System.Windows.Forms.ComboBox
+    $box.DropDownStyle = 'DropDownList'
+    [void]$box.Items.Add('(choose a printer)')
+    foreach ($printer in $installed) { [void]$box.Items.Add($printer) }
+    if ($Current) { $box.SelectedItem = $Current }
+    if ($box.SelectedIndex -lt 0) { $box.SelectedIndex = 0 }
+    $box
+  }
+  $a4 = if ($Config -and $Config.a4Printer) { [string]$Config.a4Printer } else { '' }
+  $sticker = if ($Config -and $Config.stickerPrinter) { [string]$Config.stickerPrinter } else { '' }
+  # Not chosen yet: suggest the Windows default printer for A4.
+  if (-not $a4) { $windowsDefault = Get-DefaultPrinter; if ($windowsDefault -ne $sticker) { $a4 = $windowsDefault } }
+  $controls.a4Printer = & $printerBox $a4
+  & $row 'A4 printer' $controls.a4Printer 300
+  $controls.stickerPrinter = & $printerBox $sticker
   & $row 'Sticker printer' $controls.stickerPrinter 300
+
+  $watch = if ($Config) { [string]$Config.watchFolder } else { '' }
+  $files = if ($Config) { [string]$Config.filesFolder } else { '' }
+  & $folderRow 'Folder to listen to' $watch 'watchFolder'
+  $script:SetupY += 12
+  & $folderRow 'Files to print are in' $files 'filesFolder'
+  $script:SetupY += 12
 
   $script:SetupY += 44
   $controls.startAtSignIn = New-Object System.Windows.Forms.CheckBox
@@ -703,36 +904,41 @@ function New-SetupForm($Config) {
 
   $controls.save = New-Object System.Windows.Forms.Button
   $controls.save.Text = 'Save and start'
-  $controls.save.Location = New-Object System.Drawing.Point(316, 372)
+  $controls.save.Location = New-Object System.Drawing.Point(316, 456)
   $controls.save.Size = New-Object System.Drawing.Size(128, 32)
   $form.Controls.Add($controls.save)
   $form.AcceptButton = $controls.save
   $controls.cancel = New-Object System.Windows.Forms.Button
   $controls.cancel.Text = 'Cancel'
   $controls.cancel.DialogResult = 'Cancel'
-  $controls.cancel.Location = New-Object System.Drawing.Point(452, 372)
+  $controls.cancel.Location = New-Object System.Drawing.Point(452, 456)
   $controls.cancel.Size = New-Object System.Drawing.Size(92, 32)
   $form.Controls.Add($controls.cancel)
   $form.CancelButton = $controls.cancel
   return @{ form = $form; controls = $controls }
 }
 
-function Show-SetupWindow($Config) {
+function Show-SetupWindow($Config, $Site = $null) {
   # Returns the new settings, or $null when cancelled.
-  $window = New-SetupForm $Config
+  $window = New-SetupForm $Config $Site
   $c = $window.controls
   $script:SetupResult = $null
   $c.save.Add_Click({
     $c.problem.Text = ''
+    if ($c.a4Printer.SelectedIndex -le 0) { $c.problem.Text = 'Choose the A4 printer.'; return }
+    if ($c.stickerPrinter.SelectedIndex -le 0) { $c.problem.Text = 'Choose the sticker printer.'; return }
     $watch = $c.watchFolder.Text.Trim()
     $files = $c.filesFolder.Text.Trim()
-    if (-not (Test-Path -LiteralPath $watch -PathType Container)) { $c.problem.Text = 'The folder to listen to does not exist.'; return }
-    if (-not $files) { $c.problem.Text = 'Choose the folder with the files to print.'; return }
-    if (-not (Test-Path -LiteralPath $files)) { New-Item -ItemType Directory -Force -Path $files | Out-Null }
+    if ($watch -and -not (Test-Path -LiteralPath ([Environment]::ExpandEnvironmentVariables($watch)) -PathType Container)) { $c.problem.Text = 'The folder to listen to does not exist.'; return }
+    if ($files -and -not (Test-Path -LiteralPath ([Environment]::ExpandEnvironmentVariables($files)))) {
+      try { New-Item -ItemType Directory -Force -Path ([Environment]::ExpandEnvironmentVariables($files)) | Out-Null }
+      catch { $c.problem.Text = 'The folder with the files to print could not be made.'; return }
+    }
     $result = @{
       watchFolder = $watch
       filesFolder = $files
-      stickerPrinter = if ($c.stickerPrinter.SelectedIndex -le 0) { '' } else { [string]$c.stickerPrinter.SelectedItem }
+      a4Printer = [string]$c.a4Printer.SelectedItem
+      stickerPrinter = [string]$c.stickerPrinter.SelectedItem
       dryRun = if ($Config) { [bool]$Config.dryRun } else { $false }
       startAtSignIn = $c.startAtSignIn.Checked
       email = if ($Config) { $Config.email } else { '' }
@@ -769,25 +975,163 @@ function Show-SetupWindow($Config) {
 
 # ---- Printing ------------------------------------------------------------------------
 
-function Invoke-PrintFile([string]$Path, [int]$Copies, [bool]$Dry) {
+function Get-DefaultPrinter {
+  Add-Type -AssemblyName System.Drawing
+  return [string](New-Object System.Drawing.Printing.PrinterSettings).PrinterName
+}
+
+function New-PrintJob([string]$Printer, [string]$Name, [string]$ToFile) {
+  # A print job for one named printer, with no "Printing..." window.
+  # ToFile: print into a file instead (for tests, with "Microsoft Print to PDF").
+  Add-Type -AssemblyName System.Drawing
+  $doc = New-Object System.Drawing.Printing.PrintDocument
+  $doc.PrinterSettings.PrinterName = $Printer
+  if (-not $doc.PrinterSettings.IsValid) { $doc.Dispose(); throw "There is no printer named '$Printer' on this PC." }
+  if ($ToFile) { $doc.PrinterSettings.PrintToFile = $true; $doc.PrinterSettings.PrintFileName = $ToFile }
+  $doc.DocumentName = $Name
+  $doc.PrintController = New-Object System.Drawing.Printing.StandardPrintController
+  return $doc
+}
+
+function Get-PrintKind([string]$Path) {
+  # How a file is printed: PDFs and pictures are drawn by the agent, text is
+  # laid out by the agent, anything else goes through its app (Word, Excel...).
+  $ext = [System.IO.Path]::GetExtension($Path).ToLowerInvariant()
+  if ($ext -eq '.pdf') { return 'pdf' }
+  if (@('.png', '.jpg', '.jpeg', '.bmp', '.gif', '.tif', '.tiff') -contains $ext) { return 'picture' }
+  if (@('.txt', '.csv', '.tsv', '.log') -contains $ext) { return 'text' }
+  return 'app'
+}
+
+$script:WinRt = $null
+function Wait-WinRt($Operation, [type]$ResultType) {
+  # Windows' own PDF reader is a Windows Runtime API: wait for its answers.
+  if (-not $script:WinRt) {
+    Add-Type -AssemblyName System.Runtime.WindowsRuntime
+    $null = [Windows.Storage.StorageFile, Windows.Storage, ContentType = WindowsRuntime]
+    $null = [Windows.Data.Pdf.PdfDocument, Windows.Data.Pdf, ContentType = WindowsRuntime]
+    $null = [Windows.Storage.Streams.InMemoryRandomAccessStream, Windows.Storage.Streams, ContentType = WindowsRuntime]
+    $methods = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 }
+    $script:WinRt = @{
+      operation = $methods | Where-Object { $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' } | Select-Object -First 1
+      action = $methods | Where-Object { $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncAction' } | Select-Object -First 1
+    }
+  }
+  if (-not $Operation) { return }
+  $task = if ($ResultType) { $script:WinRt.operation.MakeGenericMethod($ResultType).Invoke($null, @($Operation)) } else { $script:WinRt.action.Invoke($null, @($Operation)) }
+  [void]$task.Wait(60000)
+  if ($ResultType) { return $task.Result }
+}
+
+function Open-Pdf([string]$Path) {
+  Wait-WinRt $null $null
+  $file = Wait-WinRt ([Windows.Storage.StorageFile]::GetFileFromPathAsync((Resolve-Path -LiteralPath $Path).Path)) ([Windows.Storage.StorageFile])
+  return Wait-WinRt ([Windows.Data.Pdf.PdfDocument]::LoadFromFileAsync($file)) ([Windows.Data.Pdf.PdfDocument])
+}
+
+function Get-PdfPagePicture($Pdf, [int]$Index) {
+  # One page as a picture, sharp enough for paper (about 200 dots per inch).
+  $page = $Pdf.GetPage([uint32]$Index)
+  try {
+    $stream = New-Object Windows.Storage.Streams.InMemoryRandomAccessStream
+    $options = New-Object Windows.Data.Pdf.PdfPageRenderOptions
+    $options.DestinationWidth = [uint32][Math]::Max(1, [Math]::Round($page.Size.Width * 2))
+    Wait-WinRt ($page.RenderToStreamAsync($stream, $options)) $null
+    return [System.Drawing.Image]::FromStream([System.IO.WindowsRuntimeStreamExtensions]::AsStreamForRead($stream))
+  } finally { $page.Dispose() }
+}
+
+function Invoke-PrintPictures([string]$Printer, [string]$Name, [int]$Count, [scriptblock]$GetPicture, [string]$ToFile) {
+  # Pages that are pictures, each fitted to the printable area at the top of
+  # the page; a wide one turns the page to landscape.
+  $doc = New-PrintJob $Printer $Name $ToFile
+  $state = @{ index = 0; picture = $null }
+  $doc.add_QueryPageSettings({
+    param($job, $e)
+    $state.picture = & $GetPicture $state.index
+    $e.PageSettings.Landscape = $state.picture.Width -gt $state.picture.Height
+  })
+  $doc.add_PrintPage({
+    param($job, $e)
+    $picture = $state.picture
+    $area = $e.Graphics.VisibleClipBounds
+    $scale = [Math]::Min($area.Width / $picture.Width, $area.Height / $picture.Height)
+    $w = $picture.Width * $scale
+    $h = $picture.Height * $scale
+    $e.Graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+    $e.Graphics.DrawImage($picture, [float]($area.X + ($area.Width - $w) / 2), [float]$area.Y, [float]$w, [float]$h)
+    $picture.Dispose()
+    $state.picture = $null
+    $state.index++
+    $e.HasMorePages = $state.index -lt $Count
+  })
+  try { $doc.Print() } finally { if ($state.picture) { $state.picture.Dispose() }; $doc.Dispose() }
+}
+
+function Invoke-PrintText([string]$Printer, [string]$Path, [string]$ToFile) {
+  # A text or CSV file, page after page, in a fixed-width font.
+  $text = [System.IO.File]::ReadAllText($Path).Replace("`t", '    ').Replace("`r`n", "`n")
+  if (-not $text.Trim()) { $text = ' ' }
+  $doc = New-PrintJob $Printer ([System.IO.Path]::GetFileName($Path)) $ToFile
+  $state = @{ rest = $text; font = (New-Object System.Drawing.Font('Consolas', 10)) }
+  $doc.add_PrintPage({
+    param($job, $e)
+    $area = New-Object System.Drawing.RectangleF($e.MarginBounds.X, $e.MarginBounds.Y, $e.MarginBounds.Width, $e.MarginBounds.Height)
+    $format = New-Object System.Drawing.StringFormat
+    $format.Trimming = [System.Drawing.StringTrimming]::Word
+    $fitted = 0
+    $lines = 0
+    [void]$e.Graphics.MeasureString($state.rest, $state.font, $area.Size, $format, [ref]$fitted, [ref]$lines)
+    if ($fitted -lt 1) { $fitted = $state.rest.Length }
+    $e.Graphics.DrawString($state.rest.Substring(0, $fitted), $state.font, [System.Drawing.Brushes]::Black, $area, $format)
+    $state.rest = $state.rest.Substring($fitted)
+    $e.HasMorePages = $state.rest.Length -gt 0
+  })
+  try { $doc.Print() } finally { $state.font.Dispose(); $doc.Dispose() }
+}
+
+function Invoke-PrintWithApp([string]$Printer, [string]$Path) {
+  # Word, Excel and the like: the file's app prints it to the named printer
+  # (the "print to" command apps register with Windows).
+  $info = New-Object System.Diagnostics.ProcessStartInfo $Path
+  if (-not (@($info.Verbs) -contains 'printto')) {
+    throw "no app on this PC can print $([System.IO.Path]::GetExtension($Path)) files to a chosen printer"
+  }
+  $info.Verb = 'printto'
+  $info.Arguments = '"' + $Printer + '"'
+  $info.UseShellExecute = $true
+  $info.WindowStyle = 'Hidden'
+  [void][System.Diagnostics.Process]::Start($info)
+  Start-Sleep -Seconds 2
+}
+
+function Invoke-PrintFile([string]$Path, [int]$Copies, [string]$Printer, [bool]$Dry, [string]$ToFile = '') {
+  # A file on the A4 printer, as many copies as asked.
+  $name = [System.IO.Path]::GetFileName($Path)
+  $kind = Get-PrintKind $Path
   for ($n = 1; $n -le [Math]::Max(1, $Copies); $n++) {
-    if ($Dry) { Write-AgentLog "  (dry run) would print $Path"; continue }
-    # The app Windows uses for this kind of file prints it to the default
-    # printer - for PDFs that needs a reader with a Print command (Adobe Reader).
-    Start-Process -FilePath $Path -Verb Print -WindowStyle Hidden
-    Start-Sleep -Seconds 2
+    if ($Dry) { Write-AgentLog "  (dry run) would print $Path on '$Printer'"; continue }
+    switch ($kind) {
+      'pdf' {
+        $pdf = $null
+        try { $pdf = Open-Pdf $Path } catch { }
+        if ($pdf -and $pdf.PageCount -gt 0) {
+          Invoke-PrintPictures $Printer $name ([int]$pdf.PageCount) { param($index) Get-PdfPagePicture $pdf $index } $ToFile
+        } else {
+          # Windows could not read it (a password, say): its PDF app may.
+          Invoke-PrintWithApp $Printer $Path
+        }
+      }
+      'picture' { Invoke-PrintPictures $Printer $name 1 { param($index) [System.Drawing.Image]::FromFile($Path) } $ToFile }
+      'text' { Invoke-PrintText $Printer $Path $ToFile }
+      default { Invoke-PrintWithApp $Printer $Path }
+    }
   }
 }
 
 function Invoke-PrintSticker([string]$Printer, [string[]]$Lines, [bool]$Dry, [string]$ToFile) {
   if ($Dry) { Write-AgentLog ("  (dry run) would print a sticker on '{0}': {1}" -f $Printer, ($Lines -join ' | ')); return }
-  Add-Type -AssemblyName System.Drawing
-  $doc = New-Object System.Drawing.Printing.PrintDocument
-  $doc.PrinterSettings.PrinterName = $Printer
-  if (-not $doc.PrinterSettings.IsValid) { throw "There is no printer named '$Printer' on this PC." }
-  if ($ToFile) { $doc.PrinterSettings.PrintToFile = $true; $doc.PrinterSettings.PrintFileName = $ToFile }
-  $doc.DocumentName = 'NBLAB sticker'
-  $doc.PrintController = New-Object System.Drawing.Printing.StandardPrintController
+  $doc = New-PrintJob $Printer 'NBLAB sticker' $ToFile
   $text = ($Lines -join "`n")
   $doc.add_PrintPage({
     param($printing, $page)
@@ -860,16 +1204,20 @@ function Invoke-Automation([string]$Path, $Config, $Automations) {
   Write-AgentLog "'$($plan.automation.name)' for $($plan.file)"
   $done = @()
   $problems = @()
+  $a4 = [string]$Config.a4Printer
+  $a4Missing = 'no A4 printer is chosen on this PC (right-click the NBLAB icon, Settings)'
   if ($plan.printFile) {
-    try { Invoke-PrintFile $Path $plan.fileCopies $dry; $done += 'the file' } catch { $problems += "the file: $($_.Exception.Message)" }
+    if (-not $a4) { $problems += $a4Missing }
+    else { try { Invoke-PrintFile $Path $plan.fileCopies $a4 $dry; $done += 'the file' } catch { $problems += "the file: $($_.Exception.Message)" } }
   }
   foreach ($doc in $plan.documents) {
     $docName = Split-Path -Leaf $doc.path
     if (-not (Test-Path -LiteralPath $doc.path)) { $problems += "$docName is not in $($Config.filesFolder)"; continue }
-    try { Invoke-PrintFile $doc.path $doc.copies $dry; $done += $docName } catch { $problems += "${docName}: $($_.Exception.Message)" }
+    if (-not $a4) { if ($problems -notcontains $a4Missing) { $problems += $a4Missing }; continue }
+    try { Invoke-PrintFile $doc.path $doc.copies $a4 $dry; $done += $docName } catch { $problems += "${docName}: $($_.Exception.Message)" }
   }
   if ($plan.sticker) {
-    if (-not $Config.stickerPrinter) { $problems += 'no sticker printer is chosen in the settings' }
+    if (-not $Config.stickerPrinter) { $problems += 'no sticker printer is chosen on this PC (right-click the NBLAB icon, Settings)' }
     else {
       try { Invoke-PrintSticker $Config.stickerPrinter $plan.stickerLines $dry ''; $done += 'sticker' } catch { $problems += "sticker: $($_.Exception.Message)" }
     }
@@ -895,9 +1243,11 @@ $config = Get-AgentConfig
 if ($Test) {
   if (-not $config) { Write-Host 'Not set up yet: double-click nblab-automation.cmd first.' -ForegroundColor Yellow; exit 1 }
   $loaded = Get-Automations $config
-  $plan = Get-Plan (Resolve-Path -LiteralPath $Test).Path $config $loaded.automations
+  $effective = Get-EffectiveSettings $config $loaded.settings
+  $plan = Get-Plan (Resolve-Path -LiteralPath $Test).Path $effective $loaded.automations
   Write-Host "NBLAB automation agent $AgentVersion - test of $($plan.file)" -ForegroundColor Cyan
   Write-Host "$($loaded.automations.Count) automations for site $($loaded.site), from the $($loaded.from)"
+  Format-EffectiveSettings $effective | ForEach-Object { Write-Host "  $_" }
   Write-Host "`n--- Text read from the file (first 1500 characters) ---"
   $preview = $plan.text
   if ($preview.Length -gt 1500) { $preview = $preview.Substring(0, 1500) + ' ...' }
@@ -906,12 +1256,12 @@ if ($Test) {
   if (-not $plan.automation) { Write-Host 'No automation matches this file.' -ForegroundColor Yellow; exit 0 }
   Write-Host "Matches: $($plan.automation.name)" -ForegroundColor Green
   foreach ($key in ($plan.values.Keys | Sort-Object)) { Write-Host ("  {{{0}}} = {1}" -f $key, $plan.values[$key]) }
-  if ($plan.printFile) { Write-Host "Would print the file x$($plan.fileCopies)" }
+  if ($plan.printFile) { Write-Host "Would print the file x$($plan.fileCopies) on '$($effective.a4Printer)'" }
   foreach ($doc in $plan.documents) {
     $state = if (Test-Path -LiteralPath $doc.path) { 'found' } else { 'NOT FOUND' }
-    Write-Host "Would print $($doc.path) x$($doc.copies) ($state)"
+    Write-Host "Would print $($doc.path) x$($doc.copies) on '$($effective.a4Printer)' ($state)"
   }
-  if ($plan.sticker) { Write-Host "Would print a sticker on '$($config.stickerPrinter)':"; $plan.stickerLines | ForEach-Object { Write-Host "  | $_" } }
+  if ($plan.sticker) { Write-Host "Would print a sticker on '$($effective.stickerPrinter)':"; $plan.stickerLines | ForEach-Object { Write-Host "  | $_" } }
   exit 0
 }
 
@@ -921,7 +1271,7 @@ Add-Type -AssemblyName System.Drawing
 # One agent per Windows user. Starting another - typically a newer download -
 # offers to replace the one that is running.
 $created = $false
-$mutex = New-Object System.Threading.Mutex($true, 'NBLAB-dispatch-automation', [ref]$created)
+$mutex = New-Object System.Threading.Mutex($true, $MutexName, [ref]$created)
 if (-not $created) {
   $answer = [System.Windows.Forms.MessageBox]::Show(
     "NBLAB automation is already running.`n`nStop it and start this copy instead? Choose Yes after downloading a new version.",
@@ -933,11 +1283,16 @@ if (-not $created) {
   try { [void]$mutex.WaitOne(10000) } catch [System.Threading.AbandonedMutexException] { }
 }
 
-if (-not $config -or $Setup -or -not $config.refreshToken) {
-  $config = Show-SetupWindow $config
+# The setup window first: never set up, asked for, or something missing -
+# the sign-in or one of the two printers.
+if (-not $config -or $Setup -or -not $config.refreshToken -or -not $config.a4Printer -or -not $config.stickerPrinter) {
+  $knownSite = $null
+  if ($config -and (Test-Path -LiteralPath $CachePath)) {
+    try { $knownSite = (ConvertFrom-SavedAutomations ([System.IO.File]::ReadAllText($CachePath) | ConvertFrom-Json) '').settings } catch { }
+  }
+  $config = Show-SetupWindow $config $knownSite
   if (-not $config) { exit 0 }
 }
-if ($DryRun) { $config.dryRun = $true }
 
 # Keep "start with Windows" pointing at this copy, so a newer download takes
 # over the next sign-in too, without opening the settings.
@@ -945,7 +1300,7 @@ if ($config.startAtSignIn) {
   try { Set-StartAtSignIn $true } catch { Write-AgentLog "Could not set start at sign-in: $($_.Exception.Message)" }
 }
 
-try { $loaded = Get-Automations $config }
+try { $script:Loaded = Get-Automations $config }
 catch {
   [void][System.Windows.Forms.MessageBox]::Show("Could not read the automations from the NBLAB website:`n$($_.Exception.Message)", 'NBLAB automation')
   exit 1
@@ -957,24 +1312,73 @@ $script:Tray.Visible = $true
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
 $script:Stop = $false
 $script:Reconfigure = $false
+$script:CheckForUpdate = $false
+$script:Restart = $false
 [void]$menu.Items.Add('Settings...', $null, { $script:Reconfigure = $true })
 [void]$menu.Items.Add('Open the log', $null, { Start-Process notepad.exe $LogPath })
-[void]$menu.Items.Add('Open the files to print', $null, { Start-Process explorer.exe $config.filesFolder })
+[void]$menu.Items.Add('Open the files to print', $null, { Start-Process explorer.exe $script:Effective.filesFolder })
+[void]$menu.Items.Add('Check for updates', $null, { $script:CheckForUpdate = $true })
 [void]$menu.Items.Add('Stop', $null, { $script:Stop = $true })
 $script:Tray.ContextMenuStrip = $menu
 
 $script:Watcher = $null
-function Start-Watching($Config) {
+$script:Effective = $null
+function Start-Watching($Settings) {
   Stop-Watching
-  $script:Watcher = New-Object System.IO.FileSystemWatcher $Config.watchFolder
+  Resolve-AgentFolder $Settings 'watchFolder'
+  Resolve-AgentFolder $Settings 'filesFolder'
+  $script:Watcher = New-Object System.IO.FileSystemWatcher $Settings.watchFolder
   $script:Watcher.IncludeSubdirectories = $false
   $script:Watcher.NotifyFilter = [System.IO.NotifyFilters]'FileName, LastWrite, Size'
   Register-ObjectEvent $script:Watcher Created -SourceIdentifier 'nblab.created' | Out-Null
   Register-ObjectEvent $script:Watcher Renamed -SourceIdentifier 'nblab.renamed' | Out-Null
   $script:Watcher.EnableRaisingEvents = $true
-  $script:Tray.Text = 'NBLAB automation - ' + (Split-Path -Leaf $Config.watchFolder)
-  $mode = if ($Config.dryRun) { ' (DRY RUN - nothing is printed)' } else { '' }
-  Write-AgentLog "Agent $AgentVersion listening to $($Config.watchFolder); files to print in $($Config.filesFolder)$mode"
+  $tip = "NBLAB automation $AgentVersion - " + (Split-Path -Leaf $Settings.watchFolder)
+  $script:Tray.Text = if ($tip.Length -gt 63) { $tip.Substring(0, 63) } else { $tip }
+  Write-AgentLog ("Agent $AgentVersion listening. " + ((Format-EffectiveSettings $Settings) -join '; '))
+}
+
+function Use-Settings([bool]$Restart = $false) {
+  # Apply what this PC follows now; listen again if the folder changed.
+  $next = Get-EffectiveSettings $config $script:Loaded.settings
+  if ($DryRun) { $next.dryRun = $true; $next.from.dryRun = 'this run' }
+  $next.wanted = @{}
+  $before = $script:Effective
+  $script:Effective = $next
+  if ($Restart -or -not $before -or $before.wanted.watchFolder -ne $next.watchFolder) { Start-Watching $next; return }
+  # Same folder to listen to: keep listening, and keep any fallback folder.
+  $next.watchFolder = $before.watchFolder
+  $next.wanted.watchFolder = $before.wanted.watchFolder
+  if ($before.wanted.filesFolder -ne $next.filesFolder) { Resolve-AgentFolder $next 'filesFolder' }
+  else { $next.filesFolder = $before.filesFolder; $next.wanted.filesFolder = $before.wanted.filesFolder }
+  $same = $true
+  foreach ($key in @('filesFolder', 'a4Printer', 'stickerPrinter', 'dryRun')) { if ($before[$key] -ne $next[$key]) { $same = $false } }
+  if (-not $same) { Write-AgentLog ('Settings changed. ' + ((Format-EffectiveSettings $next) -join '; ')) }
+}
+
+function Sync-Website {
+  # The newest automations and Lab PC settings; on trouble, keep what we have.
+  try { $script:Loaded = Get-Automations $config }
+  catch { Write-AgentLog "PROBLEM reading the website: $($_.Exception.Message)" }
+  Use-Settings
+}
+
+function Update-Agent([bool]$Manual) {
+  # True when a newer agent was saved and this one should hand over to it.
+  try {
+    $update = Get-AgentUpdate
+    if (-not $update) {
+      if ($Manual) { Show-Notice 'NBLAB automation' "This is the newest version ($AgentVersion)." }
+      return $false
+    }
+    Save-AgentUpdate $update $StableCopy
+    Write-AgentLog "Updating from $AgentVersion to $($update.version)"
+    return $true
+  } catch {
+    Write-AgentLog "Could not check for updates: $($_.Exception.Message)"
+    if ($Manual) { Show-Notice 'NBLAB automation' "Could not check for updates: $($_.Exception.Message)" 'Warning' }
+    return $false
+  }
 }
 function Stop-Watching {
   Unregister-Event -SourceIdentifier 'nblab.created' -ErrorAction SilentlyContinue
@@ -983,22 +1387,43 @@ function Stop-Watching {
   if ($script:Watcher) { $script:Watcher.Dispose(); $script:Watcher = $null }
 }
 
-Start-Watching $config
-Show-Notice 'NBLAB automation' ("Listening to $(Split-Path -Leaf $config.watchFolder) - $($loaded.automations.Count) automations for $($loaded.site)")
+Use-Settings
+if ($env:NBLAB_UPDATED_FROM) {
+  Write-AgentLog "Updated from $($env:NBLAB_UPDATED_FROM) to $AgentVersion"
+  Show-Notice 'NBLAB automation' "Updated to version $AgentVersion - listening to $(Split-Path -Leaf $script:Effective.watchFolder)"
+  Remove-Item Env:NBLAB_UPDATED_FROM
+} else {
+  Show-Notice 'NBLAB automation' ("Listening to $(Split-Path -Leaf $script:Effective.watchFolder) - $($script:Loaded.automations.Count) automations for $($script:Loaded.site)")
+}
 
 $recent = @{}
+# The website is read again every few minutes for the Lab PC settings (and on
+# every file); updates are looked for soon after starting, then twice a day.
+$nextSync = (Get-Date).AddMinutes(5)
+$nextUpdateCheck = (Get-Date).AddMinutes(2)
 try {
   while (-not $script:Stop) {
     [System.Windows.Forms.Application]::DoEvents()
     if ($script:Reconfigure) {
       $script:Reconfigure = $false
-      $changed = Show-SetupWindow $config
+      $changed = Show-SetupWindow $config $script:Loaded.settings
       if ($changed) {
         $config = $changed
         $script:Session = $null
-        Start-Watching $config
-        Show-Notice 'NBLAB automation' "Listening to $(Split-Path -Leaf $config.watchFolder)"
+        try { $script:Loaded = Get-Automations $config } catch { Write-AgentLog "PROBLEM reading the website: $($_.Exception.Message)" }
+        Use-Settings $true
+        Show-Notice 'NBLAB automation' "Listening to $(Split-Path -Leaf $script:Effective.watchFolder)"
       }
+    }
+    if ((Get-Date) -ge $nextSync) {
+      $nextSync = (Get-Date).AddMinutes(5)
+      Sync-Website
+    }
+    if ($script:CheckForUpdate -or (Get-Date) -ge $nextUpdateCheck) {
+      $manual = $script:CheckForUpdate
+      $script:CheckForUpdate = $false
+      $nextUpdateCheck = (Get-Date).AddHours(12)
+      if (Update-Agent $manual) { $script:Restart = $true; break }
     }
     $change = Wait-Event -Timeout 1
     if (-not $change) { continue }
@@ -1013,8 +1438,9 @@ try {
     if (-not (Wait-FileReady $path)) { continue }
     try {
       # The newest automations every time, so a change on the website counts at once.
-      $loaded = Get-Automations $config
-      Invoke-Automation $path $config $loaded.automations
+      $script:Loaded = Get-Automations $config
+      Use-Settings
+      Invoke-Automation $path $script:Effective $script:Loaded.automations
     } catch {
       Write-AgentLog "PROBLEM with ${name}: $($_.Exception.Message)"
       Show-Notice 'NBLAB automation' "Could not handle ${name}: $($_.Exception.Message)" 'Error'
@@ -1025,5 +1451,13 @@ try {
   $script:Tray.Visible = $false
   $script:Tray.Dispose()
   $mutex.ReleaseMutex()
-  Write-AgentLog 'Agent stopped'
+  if ($script:Restart) {
+    # Hand over to the new version, kept where "start with Windows" runs it from.
+    try {
+      [void](Start-AgentCopy $StableCopy @{ NBLAB_UPDATED_FROM = $AgentVersion })
+      Write-AgentLog 'Restarting with the new version'
+    } catch { Write-AgentLog "PROBLEM: could not start the new version: $($_.Exception.Message)" }
+  } else {
+    Write-AgentLog 'Agent stopped'
+  }
 }

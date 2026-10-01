@@ -30,6 +30,14 @@ export const JobChip = ({ type }) => {
   return <span className="job-chip" style={{ '--job-color': info.color }}>{info.label}</span>
 }
 
+/** An on/off switch. */
+export const Switch = ({ on, onChange, label }) => (
+  <button type="button" className={`switch ${on ? 'is-on' : ''}`} role="switch" aria-checked={on} aria-label={label}
+    onClick={() => onChange(!on)}>
+    <span className="switch-knob" />
+  </button>
+)
+
 /** Small uppercase label, used above headings and figures. */
 export const Eyebrow = ({ children, tone, className = '' }) => (
   <span className={`eyebrow ${tone ? `is-${tone}` : ''} ${className}`}>{children}</span>

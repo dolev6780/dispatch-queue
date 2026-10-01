@@ -26,7 +26,7 @@ import { toSlug } from './queueOps'
 import { USERS } from './authService'
 import { DISPATCH_QUEUE, WORK_PROCESSES, DISPATCH_AUTOMATION } from './features'
 import { cleanSteps } from './processes'
-import { cleanAutomation } from './automation'
+import { cleanAutomation, cleanAgentSettings } from './automation'
 
 /**
  * Firestore data layer — everything is scoped to a site.
@@ -153,6 +153,7 @@ export const deleteSite = async (siteId, featureIds) => {
   jobs.docs.forEach(job => batch.delete(job.ref))
   processes.docs.forEach(process => batch.delete(process.ref))
   automations.docs.forEach(automation => batch.delete(automation.ref))
+  batch.delete(agentSettingsRef(db, siteId))
   batch.delete(doc(db, 'sites', siteId))
   await batch.commit()
 }
@@ -528,3 +529,15 @@ export const saveAutomation = async (siteId, automationId, values, uid) => {
 
 export const deleteAutomation = (siteId, automationId) =>
   deleteDoc(doc(automationsCollection(requireDb(), siteId), automationId))
+
+const agentSettingsRef = (db, siteId) => doc(db, ...featurePath(siteId, DISPATCH_AUTOMATION), 'settings', 'agent')
+
+/** The site's settings for the lab-PC agents, live; null until set. */
+export const watchAgentSettings = (siteId, onChange, onError) => {
+  const db = getDb()
+  if (!db || !siteId) return () => {}
+  return onSnapshot(agentSettingsRef(db, siteId), (snapshot) => onChange(snapshot.exists() ? snapshot.data() : null), onError)
+}
+
+export const saveAgentSettings = (siteId, values, uid) =>
+  setDoc(agentSettingsRef(requireDb(), siteId), { ...cleanAgentSettings(values), updatedBy: uid, updatedAt: serverTimestamp() })

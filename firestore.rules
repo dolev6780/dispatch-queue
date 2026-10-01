@@ -187,6 +187,18 @@ service cloud.firestore {
         && d.updatedAt == request.time;
     }
 
+    // The site's settings for the lab-PC automation agents: where to listen,
+    // where the files to print are, and test mode. Each PC follows them unless
+    // it sets its own folders. Printers are never here: each PC chooses its own.
+    function validAgentSettings(d) {
+      return d.keys().hasOnly(['watchFolder', 'filesFolder', 'dryRun', 'updatedAt', 'updatedBy'])
+        && d.watchFolder is string && d.watchFolder.size() <= 260
+        && d.filesFolder is string && d.filesFolder.size() <= 260
+        && d.dryRun is bool
+        && d.updatedBy == request.auth.uid
+        && d.updatedAt == request.time;
+    }
+
     // A job either has no process, or carries an exact copy of one of this
     // site's processes — title and steps — with every step still unticked.
     function validJobProcess(d, siteId) {
@@ -384,6 +396,15 @@ service cloud.firestore {
         allow create, update: if featureId == 'dispatch-automation'
           && isHomeAdmin(siteId)
           && validAutomation(request.resource.data);
+        allow delete: if isHomeAdmin(siteId);
+      }
+
+      match /features/{featureId}/settings/{settingsId} {
+        allow read: if featureId == 'dispatch-automation' && settingsId == 'agent'
+          && (belongsTo(siteId) || isHomeAdmin(siteId));
+        allow create, update: if featureId == 'dispatch-automation' && settingsId == 'agent'
+          && isHomeAdmin(siteId)
+          && validAgentSettings(request.resource.data);
         allow delete: if isHomeAdmin(siteId);
       }
 

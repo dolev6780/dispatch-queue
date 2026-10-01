@@ -216,15 +216,15 @@ export const SettingsPage = ({
             </span>
             <ol className="tool-steps">
               <li>Press <strong>Download</strong> and double-click <code>nblab-automation.cmd</code>.</li>
-              <li>In the window: your <strong>work ID</strong>, the <strong>folder to listen to</strong>, the folder with the <strong>files to print</strong>, and the <strong>sticker printer</strong>. Press <em>Save and start</em>.</li>
-              <li>Put the files to print (like <code>LDO.pdf</code>) in that folder, named as in the automations.</li>
+              <li>In the window, enter your <strong>work ID</strong> and choose this PC&apos;s two printers from its Windows printers: the <strong>A4 printer</strong> and the <strong>sticker printer</strong>. Press <em>Save and start</em>. The folders come from <strong>Automation → Lab PC settings</strong>; fill them in only for a PC that needs its own.</li>
+              <li>Put the files to print (like <code>LDO.pdf</code>) in the files folder, named as in the automations.</li>
             </ol>
             <span className="tool-note">
-              It then runs out of sight next to the clock and starts with Windows; changes on the Automation page reach it by
-              themselves. Right-click its icon for the settings or the log. To update it, download again, double-click, and
-              choose <em>Yes</em> to replace the running copy. Try a file without printing:
-              <code>nblab-automation.cmd -Test "C:\path\to\file.pdf"</code>. PDFs print through the PC&apos;s PDF app (it needs a
-              Print command, like Adobe Reader). If company policy blocks scripts, IT has to allow it.
+              It then runs out of sight next to the clock, starts with Windows, and updates itself when a new version is
+              published here. Changes on the Automation page — automations and Lab PC settings — reach it within minutes.
+              Right-click its icon for the settings, the log, or <em>Check for updates</em>. Try a file without printing:
+              <code>nblab-automation.cmd -Test "C:\path\to\file.pdf"</code>. PDFs, pictures and text files print by Windows itself — no
+              PDF app needed; Word and Excel files print through Office. If company policy blocks scripts, IT has to allow it.
             </span>
           </div>
           <a className="btn btn-dark tool-install" href={AGENT_URL} download="nblab-automation.cmd">

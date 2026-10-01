@@ -4,18 +4,23 @@ import { defineConfig, loadEnv } from 'vite'
 
 const tool = (name) => readFileSync(new URL(`./tools/${name}`, import.meta.url))
 
+// Where the published agent is; the agents on the lab PCs check it for a newer version.
+const AGENT_UPDATE_URL = 'https://dolev6780.github.io/dispatch-queue/nblab-automation.cmd'
+
 /**
  * The dispatch automation agent, as the one file people download:
  * nblab-automation.cmd. Its first lines are a Windows batch script that runs
  * the rest of the same file in PowerShell (inside <# #>, PowerShell skips
  * them); the rest is tools/nblab-automation.ps1 with the website's public
- * Firebase settings filled in, so the agent can sign in like the website.
+ * Firebase settings filled in, so the agent can sign in like the website,
+ * and the address it updates itself from.
  * Batch files need Windows line endings.
  */
 export const agentCmd = (env) => {
   const script = tool('nblab-automation.ps1').toString('utf8')
     .replace('__NBLAB_FIREBASE_API_KEY__', env.VITE_FIREBASE_API_KEY || '')
     .replace('__NBLAB_FIREBASE_PROJECT_ID__', env.VITE_FIREBASE_PROJECT_ID || '')
+    .replace('__NBLAB_UPDATE_URL__', env.VITE_AGENT_UPDATE_URL || AGENT_UPDATE_URL)
   const run = "& ([scriptblock]::Create([IO.File]::ReadAllText($env:NBLAB_SELF))) -Self $env:NBLAB_SELF -Test $env:NBLAB_TEST -Setup:($env:NBLAB_SETUP -eq '1')"
   // The agent itself is started with no console at all (CreateNoWindow):
   // "-WindowStyle Hidden" is ignored when Windows Terminal hosts consoles

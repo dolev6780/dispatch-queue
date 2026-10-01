@@ -1,6 +1,7 @@
 import {
   cleanAutomation, validateAutomation, emptyAutomation, splitList, placeholdersIn, unknownPlaceholders,
-  automationSummary, matchAutomation, readField, readFields, fillSticker, builtinValues, LIMITS
+  automationSummary, matchAutomation, readField, readFields, fillSticker, builtinValues, LIMITS,
+  AGENT_DEFAULTS, cleanAgentSettings, validateAgentSettings
 } from './automation.js'
 
 let pass = 0
@@ -75,6 +76,16 @@ const values = { ...readFields(text, base.stickerFields), ...builtinValues({ fil
 eq('lines filled in', fillSticker(base.stickerLines, values), ['RITM0012345', 'Asset NB-48213', '01/10/2026'])
 eq('placeholders in any case', fillSticker(['{TICKET}'], values), ['RITM0012345'])
 eq('an unknown placeholder is left empty', fillSticker(['[{nothing}]'], values), ['[]'])
+
+console.log('--- the site\'s PC settings ---')
+eq('defaults use each person\'s own folders', AGENT_DEFAULTS.watchFolder, '%USERPROFILE%\\Downloads')
+eq('cleaned: trimmed, cut, test mode as true/false, never a printer', cleanAgentSettings({ watchFolder: ' C:\\In ', filesFolder: 'x'.repeat(300), stickerPrinter: ' Zebra ', dryRun: 'yes' }),
+  { watchFolder: 'C:\\In', filesFolder: 'x'.repeat(260), dryRun: true })
+eq('valid with %USERPROFILE%', validateAgentSettings(AGENT_DEFAULTS), null)
+eq('valid with a drive and a network share', validateAgentSettings({ watchFolder: 'D:\\GrabGo', filesFolder: '\\\\lab-server\\print' }), null)
+eq('needs a folder to listen to', validateAgentSettings({ watchFolder: ' ', filesFolder: 'C:\\x' }), 'Choose the folder to listen to.')
+eq('a folder must look like a Windows folder', validateAgentSettings({ watchFolder: 'Downloads', filesFolder: 'C:\\x' }).startsWith('The folder to listen to should look like'), true)
+eq('needs the files folder', validateAgentSettings({ watchFolder: 'C:\\x', filesFolder: '' }), 'Choose the folder with the files to print.')
 
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

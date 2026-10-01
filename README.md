@@ -104,13 +104,13 @@ tools/
   servicenow-relay.mjs        main-PC server: shares the unassigned list with the other lab PCs, in memory,
                               and answers the AI assistant with the Gemini key it keeps (tested)
 rules-tests/
-  rules.test.mjs           216-case security-rules suite, run in the Firestore emulator
+  rules.test.mjs           230-case security-rules suite, run in the Firestore emulator
 ```
 
 ```bash
-npm test             # 450 assertions on the pure logic, no browser or network
-npm run test:agent   # 67 cases for the lab-PC automation agent (Windows PowerShell)
-npm run test:rules   # 216 security-rule cases in the local Firestore emulator (needs Java)
+npm test             # 457 assertions on the pure logic, no browser or network
+npm run test:agent   # 115 cases for the lab-PC automation agent (Windows PowerShell)
+npm run test:rules   # 230 security-rule cases in the local Firestore emulator (needs Java)
 ```
 
 CI runs `lint` and `test` before every deploy. The rules suite runs locally — it needs Java and the Firebase CLI.
@@ -248,7 +248,7 @@ An **Assistant** tab where technicians ask IT and PC questions and get step-by-s
 
 ## Dispatch automation 🖨️
 
-When a worker returns a user's PC through **Grab & Go**, the file the return produces arrives on their lab PC — and that PC prints what the return needs: the file itself, the documents for that type of return (like the LDO form), and a sticker on the sticker printer with the ticket and asset details.
+When a worker returns a user's PC through **Grab & Go**, the file the return produces arrives on their lab PC — and that PC prints what the return needs: the file itself and the documents for that type of return (like the LDO form) on its **A4 printer**, and a sticker with the ticket and asset details on its **sticker printer**.
 
 **On the website** (*Automation* tab), site admins write the automations. Each one has:
 
@@ -258,16 +258,20 @@ When a worker returns a user's PC through **Grab & Go**, the file the return pro
 
 *Try it* on the page runs the same rules on pasted text — which automation would trigger and the sticker it would print — without printing anything.
 
-**On each lab PC**, the agent — [`tools/nblab-automation.ps1`](./tools/nblab-automation.ps1), Windows PowerShell, nothing to install — is **one file**: *Settings → Lab PC tools → Download* gives `nblab-automation.cmd`. Double-click it and a window asks, once, for a **work ID**, the **folder to listen to**, the folder with the **files to print** (the LDO form etc.) and the **sticker printer**, with *Start when I sign in to Windows* ticked. It then runs next to the clock (right-click: settings, the log, the files to print, stop):
+**Lab PC settings** (on the same page, site admins edit, everyone at the site sees them) are what every agent at the site follows: the **folder to listen to**, the folder with the **files to print**, and **test mode** (the PCs only say what they would print). Paths may use `%USERPROFILE%`, so one value fits every person's PC. A PC whose setup window sets its own folder keeps its own; test mode is on if either turns it on. Printers are never site settings — the rules refuse them. Stored at `sites/{site}/features/dispatch-automation/settings/agent`.
+
+**On each lab PC**, the agent — [`tools/nblab-automation.ps1`](./tools/nblab-automation.ps1), Windows PowerShell, nothing to install — is **one file**: *Settings → Lab PC tools → Download* gives `nblab-automation.cmd`. Double-click it and a window asks, once, for a **work ID** and the PC's **two printers** — the **A4 printer** and the **sticker printer**, both picked from the printers installed in Windows (both are required; the A4 one starts at the Windows default) — while the folders can stay empty to follow the site's Lab PC settings, with *Start when I sign in to Windows* ticked. It then runs next to the clock (right-click: settings, the log, the files to print, check for updates, stop):
 
 1. A file finishes arriving in the folder (`.crdownload` and other partial files are ignored; it waits until the file stops growing).
 2. It reads the file's text: text, CSV, HTML, Word, Excel, and PDF (compressed pages and the font maps Windows and browsers use).
 3. The first automation whose words are all in it is applied — always the newest automations from the website. A Windows notification says what was printed, or what went wrong; every run is in the log.
-4. Files print through the PC's default app for that file type (PDFs need a reader with a Print command, like Adobe Reader); the sticker is drawn to fit the label on the named sticker printer.
+4. The file and the files to print go to the **A4 printer**: PDFs are drawn page by page by Windows' own PDF reader (`Windows.Data.Pdf`; no PDF app needed, wide pages print landscape), pictures and text/CSV files by the agent itself, and anything else (Word, Excel…) through its app's *print to* command. The sticker is drawn to fit the label on the **sticker printer**.
 
-**How it gets the automations:** it signs in once with the work ID, exactly as the website does (same derived credentials, tested against the website's code), and reads the automations of the person's current site from Firestore — the rules let any worker there read them. The work ID is never stored; the sign-in is kept encrypted with Windows DPAPI, readable only by that Windows user. If the website cannot be reached, it uses the last copy it read. Nothing from the files leaves the PC.
+**How it gets the automations:** it signs in once with the work ID, exactly as the website does (same derived credentials, tested against the website's code), and reads the automations of the person's current site from Firestore — the rules let any worker there read them. The work ID is never stored; the sign-in is kept encrypted with Windows DPAPI, readable only by that Windows user. It reads the site's Lab PC settings the same way, every five minutes and with every file, and listens to the new folder at once when it changes. If the website cannot be reached, it uses the last copy it read. Nothing from the files leaves the PC.
 
-**Built for downloading:** `vite.config.js` publishes the script as `nblab-automation.cmd` — a few batch lines that run the rest of the same file in PowerShell — with the website's public Firebase settings filled in. The agent is started with no console at all (`CreateNoWindow`), and the sign-in shortcut goes through `conhost --headless` — "hidden" windows are ignored when Windows Terminal hosts consoles, the Windows 11 default, which otherwise leaves a window open. One agent runs per Windows user; starting a newer download offers to replace the running one and refreshes the sign-in shortcut. Settings, sign-in, the saved copy and the log live in `%LOCALAPPDATA%\NBLAB\automation`; "start with Windows" is a Startup-folder shortcut to a copy kept there. `nblab-automation.cmd -Test "file.pdf"` shows what it reads from a file and what it would print; `-Setup` reopens the window.
+**Updating itself:** a couple of minutes after starting, then twice a day (or *Check for updates*), it fetches `nblab-automation.cmd` from the website. Only a **higher `$AgentVersion`** counts — so raise it with every change to the agent — and only a whole, working copy: it must be the agent, built with the website's settings, and parse as PowerShell without errors. It is saved over the copy that starts with Windows, and the agent restarts on it, with a notice. Agents before 2.2 do not update themselves: download once more.
+
+**Built for downloading:** `vite.config.js` publishes the script as `nblab-automation.cmd` — a few batch lines that run the rest of the same file in PowerShell — with the website's public Firebase settings filled in. The agent is started with no console at all (`CreateNoWindow`), and the sign-in shortcut goes through `conhost --headless` — "hidden" windows are ignored when Windows Terminal hosts consoles, the Windows 11 default, which otherwise leaves a window open. One agent runs per Windows user; starting a newer download offers to replace the running one and refreshes the sign-in shortcut. Settings, sign-in, the saved copy and the log live in `%LOCALAPPDATA%\NBLAB\automation`; "start with Windows" is a Startup-folder shortcut to a copy kept there. `nblab-automation.cmd -Test "file.pdf"` shows the settings it follows (and from where), what it reads from a file, and what it would print; `-Setup` reopens the window.
 
 The matching and detail rules exist twice — `src/services/automation.js` (the page) and the agent — and their tests mirror each other case for case (`npm test`, `npm run test:agent`).
 
