@@ -7,7 +7,8 @@ const BASE_TABS = [
   { id: 'home', label: 'Home' },
   { id: 'queue', label: 'Queue' },
   { id: 'processes', label: 'Processes' },
-  { id: 'automation', label: 'Automation' }
+  { id: 'automation', label: 'Automation' },
+  { id: 'emails', label: 'Emails' }
 ]
 
 const CONNECTION = {

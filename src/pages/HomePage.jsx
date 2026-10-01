@@ -1,10 +1,10 @@
-import { ArrowRight, BookOpen, ListOrdered, Plane, Printer } from 'lucide-react'
+import { ArrowRight, BookOpen, ListOrdered, Mail, Plane, Printer } from 'lucide-react'
 import { OnDutyCard } from '../components/OnDutyCard'
 import { Eyebrow } from '../components/ui'
 import { FEATURES } from '../services/features'
 import { formatLongDate } from '../services/format'
 
-const ICONS = { list: ListOrdered, book: BookOpen, printer: Printer }
+const ICONS = { list: ListOrdered, book: BookOpen, printer: Printer, mail: Mail }
 
 /**
  * The signed-in landing page: today at this site in one card, then the

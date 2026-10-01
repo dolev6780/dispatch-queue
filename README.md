@@ -26,6 +26,7 @@ The wall display is always dark, whatever the station's theme. Every screen has 
 - 🖥️ **Wall Display**: Always today at the station's site, always dark, readable from across the room — with open jobs along the bottom.
 - 🟢 **Live indicator**: The top bar shows *Live* while the board is connected and *Reconnecting* when it is not; editing pauses until it is back.
 - 📋 **Jobs**: Assign a job to a worker by type — PC Refresh, OTR, PC Supply, Incident, Quick IT, SSD Upgrade, RAM Upgrade, AV Incident, AV Task. The worker gets a chime and a desktop notification; the job stays across the top of the queue and along the bottom of the wall display until it is marked done.
+- ✉️ **Email Templates**: Emails the site sends often — a fixed recipient, a subject and a body with blanks. Fill them in and the email opens in Outlook, ready to send.
 - 📘 **Work Processes**: Each site's step-by-step guides, written by its admins. Link one to a job type and every new job of that type carries its steps as a checklist — the job can't be closed until every step is ticked.
 - 👷 **Accounts Are Workers**: Every account is a worker at its site. Move people between sites permanently, or temporarily until a set day — they return home automatically.
 - ✅ **Tap-to-Build Queue**: The queue in running order with each person's window and state (finished, serving, up next, later); everyone else in *Not in queue*. Tap to add or remove, arrows to reorder — no dragging, so it works the same on a phone and the wall PC.
@@ -87,7 +88,8 @@ src/
     jobs.js                job types, new-job detection, checklists, who may close a job (pure, tested)
     processes.js           work-process validation, linking to job types (pure, tested)
     assistant.js           what the AI assistant sends, and its answers read as Markdown (pure, tested)
-    automation.js          dispatch automations: matching, details, stickers, export (pure, tested)
+    automation.js          the built-in Grab & Go automation, cleaned for the agents (pure, tested)
+    emails.js              email templates: blanks, filling, Outlook and mailto links (pure, tested)
     servicenow.js          the ServiceNow list handed over by the watcher or the relay (pure, tested)
     notify.js              desktop notifications (browser Notification API)
     schedule.js            shift arithmetic (pure, tested)
@@ -104,13 +106,13 @@ tools/
   servicenow-relay.mjs        main-PC server: shares the unassigned list with the other lab PCs, in memory,
                               and answers the AI assistant with the Gemini key it keeps (tested)
 rules-tests/
-  rules.test.mjs           222-case security-rules suite, run in the Firestore emulator
+  rules.test.mjs           238-case security-rules suite, run in the Firestore emulator
 ```
 
 ```bash
-npm test             # 458 assertions on the pure logic, no browser or network
+npm test             # 494 assertions on the pure logic, no browser or network
 npm run test:agent   # 117 cases for the lab-PC automation agent (Windows PowerShell)
-npm run test:rules   # 222 security-rule cases in the local Firestore emulator (needs Java)
+npm run test:rules   # 238 security-rule cases in the local Firestore emulator (needs Java)
 ```
 
 CI runs `lint` and `test` before every deploy. The rules suite runs locally — it needs Java and the Firebase CLI.
@@ -278,6 +280,16 @@ The page hands the automation to the agent whenever it changes — from any page
 **Updating itself:** a couple of minutes after starting, then twice a day (or *Check for updates*), it fetches `nblab-automation.cmd` from the website. Only a **higher `$AgentVersion`** counts — so raise it with every change to the agent — and only a whole, working copy: it must be the agent, built for the website, and parse as PowerShell without errors. It is saved over the copy that starts with Windows, and the agent restarts on it, with a notice. Agents before 2.2 do not update themselves: download once more.
 
 **Built for downloading:** `vite.config.js` publishes the script as `nblab-automation.cmd` — a few batch lines that run the rest of the same file in PowerShell — with the website's address filled in. The agent is started with no console at all (`CreateNoWindow`), and the Startup shortcut goes through `conhost --headless` — "hidden" windows are ignored when Windows Terminal hosts consoles, the Windows 11 default. One agent runs per Windows user; double-clicking again (or a newer download) quietly takes over. `nblab-automation.cmd -Test "file.pdf"` shows what it reads from a file, its type and what it would print.
+
+## Email templates ✉️
+
+Emails the site sends often — a pickup request to a vendor, a laptop swap to the IT manager — kept as templates (*Emails* tab). Site admins write them; everyone at the site uses them. Stored at `sites/{site}/features/email-templates/templates/{id}`.
+
+- **A template** has a name, a fixed **To** (and optional **CC**; up to 10 addresses each), a subject and a body. A word in braces is a **blank** the sender fills in — `{ticket}`, `{asset tag}`, `{סיבה}`; `{date}`, `{time}`, `{name}` (the sender) and `{site}` fill themselves.
+- **Write** asks for each blank, in the order they appear, and shows the email as it will be sent. **Open in Outlook** opens Outlook on the web (`outlook.office.com/mail/deeplink/compose`) with To, CC, subject and body written; the sender checks it and presses **Send**. **Mail app** does the same through `mailto:` for the PC's own mail app, and **Copy** copies it. A very long email (a link over 8,000 characters) can only be copied.
+- Nothing is sent by the website: sending with no click would need Intel IT to allow an app to send mail through Microsoft 365. Hebrew works in names, blanks and text.
+
+The rules let only the site's admins write templates, check their shape (`validEmailTemplate`), and let everyone at the site read them.
 
 ## Settings ⚙
 

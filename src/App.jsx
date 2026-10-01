@@ -17,6 +17,7 @@ import { SignInPage } from './pages/SignInPage'
 import { SiteSetupPage } from './pages/SiteSetupPage'
 import { AdminPage } from './pages/AdminPage'
 import { ProcessesPage } from './pages/ProcessesPage'
+import { EmailsPage } from './pages/EmailsPage'
 import { AssistantPage } from './pages/AssistantPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { AutomationPage } from './pages/AutomationPage'
@@ -26,6 +27,7 @@ import { useAuth } from './hooks/useAuth'
 import { useDispatchQueue } from './hooks/useDispatchQueue'
 import { useJobs } from './hooks/useJobs'
 import { useProcesses } from './hooks/useProcesses'
+import { useEmailTemplates } from './hooks/useEmailTemplates'
 import { useLocalAgent } from './hooks/useLocalAgent'
 import { GRAB_AND_GO, GRAB_AND_GO_REVISION } from './services/automation'
 import { useServiceNowBridge } from './hooks/useServiceNowBridge'
@@ -38,7 +40,7 @@ import { watchSites, watchSite } from './services/db'
 import { alertKindFor, jobTypeOf, processFields, toggleCheck } from './services/jobs'
 import { notificationPermission, requestNotificationPermission } from './services/notify'
 import { toDateKey } from './services/dailyReset'
-import { DISPATCH_QUEUE, WORK_PROCESSES, DISPATCH_AUTOMATION } from './services/features'
+import { DISPATCH_QUEUE, WORK_PROCESSES, DISPATCH_AUTOMATION, EMAIL_TEMPLATES } from './services/features'
 import { askAssistant } from './services/assistantApi'
 import { firstNameOf, formatClockHM, formatShortDate } from './services/format'
 import {
@@ -316,6 +318,7 @@ function App() {
   // A job of a type with a process carries its steps; the checklist dialog
   // follows the live job, so ticks from another station show up here too.
   const workProcesses = useProcesses({ siteId: activeSiteId, canRead: canUse })
+  const emailTemplates = useEmailTemplates({ siteId: activeSiteId, canRead: canUse })
   // The automation agent on this PC: checked on the Automation page, and kept
   // up to date from any page where it has answered before.
   const localAgent = useLocalAgent({
@@ -553,6 +556,19 @@ function App() {
         onOpenSettings={() => navigate('settings')}
       />
     )
+  } else if (route === 'emails') {
+    content = (
+      <EmailsPage
+        key={activeSiteId}
+        site={site}
+        templates={emailTemplates.templates}
+        loaded={emailTemplates.loaded}
+        error={emailTemplates.error}
+        canEdit={isSiteAdminHere}
+        uid={auth.user.uid}
+        senderName={session?.name || ''}
+      />
+    )
   } else if (route === 'settings') {
     content = (
       <SettingsPage
@@ -624,7 +640,8 @@ function App() {
         summaries={{
           [DISPATCH_QUEUE]: !todayDay.isWorkDay ? 'Day off today' : todayCount > 0 ? `${todayCount} in queue today` : 'Queue empty today',
           [WORK_PROCESSES]: `${workProcesses.processes.length} ${workProcesses.processes.length === 1 ? 'process' : 'processes'}`,
-          [DISPATCH_AUTOMATION]: 'Grab & Go returns'
+          [DISPATCH_AUTOMATION]: 'Grab & Go returns',
+          [EMAIL_TEMPLATES]: `${emailTemplates.templates.length} ${emailTemplates.templates.length === 1 ? 'template' : 'templates'}`
         }}
         tempUntil={!global && isTempMoveActive(profile, currentTime) ? formatShortDate(lastDayOf(profile.tempEndsAt)) : null}
         onNavigate={navigate}

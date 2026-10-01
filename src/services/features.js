@@ -10,6 +10,7 @@
 export const DISPATCH_QUEUE = 'dispatch-queue'
 export const WORK_PROCESSES = 'work-processes'
 export const DISPATCH_AUTOMATION = 'dispatch-automation'
+export const EMAIL_TEMPLATES = 'email-templates'
 
 export const FEATURES = [
   {
@@ -32,5 +33,12 @@ export const FEATURES = [
     name: 'Dispatch Automation',
     description: 'When a Grab & Go file downloads on a lab PC, print what that return needs: the file, its documents and a sticker.',
     icon: 'printer'
+  },
+  {
+    id: EMAIL_TEMPLATES,
+    route: 'emails',
+    name: 'Email Templates',
+    description: 'Emails the site sends often, with blanks to fill in. They open in Outlook ready to send.',
+    icon: 'mail'
   }
 ]

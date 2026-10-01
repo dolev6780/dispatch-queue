@@ -451,6 +451,30 @@ await allow('a site admin removes it, with the site', () => deleteDoc(doc(wa, ..
 await deny('a member does not', () => deleteDoc(doc(w1, ...ggPath('haifa', 'agent'))))
 
 // ---------------------------------------------------------------------------
+console.log('\n--- email templates ---')
+const tplOf = (site) => ['sites', site, 'features', 'email-templates', 'templates']
+const template = (by, extra) => ({
+  name: 'Vendor pickup', to: ['vendor@example.com'], cc: [], subject: 'Pickup for {ticket}', body: 'Please pick up {asset}.',
+  createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: by, ...extra
+})
+await allow('a site admin writes a template', () => setDoc(doc(wa, ...tplOf('haifa'), 't1'), template('wa')))
+await allow('a global admin may too', () => setDoc(doc(as('pg'), ...tplOf('haifa'), 't2'), template('pg')))
+await deny('a member cannot', () => setDoc(doc(w1, ...tplOf('haifa'), 't3'), template('w1')))
+await deny("another site's admin cannot", () => setDoc(doc(as('pt'), ...tplOf('haifa'), 't4'), template('pt')))
+await deny('it needs an address to go to', () => setDoc(doc(wa, ...tplOf('haifa'), 't5'), template('wa', { to: [] })))
+await deny('no more than 10 recipients', () => setDoc(doc(wa, ...tplOf('haifa'), 't6'), template('wa', { cc: Array(11).fill('a@x.com') })))
+await deny('it needs a subject', () => setDoc(doc(wa, ...tplOf('haifa'), 't7'), template('wa', { subject: '' })))
+await deny('a body over 4000 characters', () => setDoc(doc(wa, ...tplOf('haifa'), 't8'), template('wa', { body: 'x'.repeat(4001) })))
+await deny('smuggle an extra field', () => setDoc(doc(wa, ...tplOf('haifa'), 't9'), template('wa', { sendAutomatically: true })))
+await deny('forge who changed it', () => setDoc(doc(wa, ...tplOf('haifa'), 't10'), template('w1')))
+await deny('under another feature', () => setDoc(doc(wa, 'sites', 'haifa', ...FQ, 'templates', 't11'), template('wa')))
+await allow('everyone at the site reads them', () => getDoc(doc(w1, ...tplOf('haifa'), 't1')))
+await deny('a worker at another site does not', () => getDoc(doc(as('wt'), ...tplOf('haifa'), 't1')))
+await deny('a stranger does not', () => getDoc(doc(as('stranger'), ...tplOf('haifa'), 't1')))
+await deny('a member cannot delete one', () => deleteDoc(doc(w1, ...tplOf('haifa'), 't1')))
+await allow('a site admin deletes one', () => deleteDoc(doc(wa, ...tplOf('haifa'), 't2')))
+
+// ---------------------------------------------------------------------------
 console.log('\n--- first-time setup on an empty database ---')
 await env.clearFirestore()
 const first = as('first')

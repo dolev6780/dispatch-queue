@@ -24,7 +24,8 @@ import { DEFAULT_DAY_SCHEDULES } from './schedule'
 import { resolveDailyReset } from './dailyReset'
 import { toSlug } from './queueOps'
 import { USERS } from './authService'
-import { DISPATCH_QUEUE, WORK_PROCESSES, DISPATCH_AUTOMATION } from './features'
+import { DISPATCH_QUEUE, WORK_PROCESSES, DISPATCH_AUTOMATION, EMAIL_TEMPLATES } from './features'
+import { cleanTemplate } from './emails'
 import { cleanSteps } from './processes'
 
 /**
@@ -144,14 +145,16 @@ export const deleteSite = async (siteId, featureIds) => {
     legacyWorkers.docs.forEach(worker => batch.delete(worker.ref))
     batch.delete(stateRef(db, siteId, featureId))
   }
-  const [jobs, processes, automations] = await Promise.all([
+  const [jobs, processes, automations, templates] = await Promise.all([
     getDocs(jobsCollection(db, siteId)),
     getDocs(processesCollection(db, siteId)),
-    getDocs(automationsCollection(db, siteId))
+    getDocs(automationsCollection(db, siteId)),
+    getDocs(templatesCollection(db, siteId))
   ])
   jobs.docs.forEach(job => batch.delete(job.ref))
   processes.docs.forEach(process => batch.delete(process.ref))
   automations.docs.forEach(automation => batch.delete(automation.ref))
+  templates.docs.forEach(template => batch.delete(template.ref))
   batch.delete(settingsRef(db, siteId, 'agent'))
   batch.delete(settingsRef(db, siteId, 'automation'))
   batch.delete(doc(db, 'sites', siteId))
@@ -504,3 +507,36 @@ export const deleteProcess = (siteId, processId) =>
 
 const automationsCollection = (db, siteId) => collection(db, ...featurePath(siteId, DISPATCH_AUTOMATION), 'automations')
 const settingsRef = (db, siteId, name) => doc(db, ...featurePath(siteId, DISPATCH_AUTOMATION), 'settings', name)
+
+// ---------------------------------------------------------------------------
+// Email templates
+// ---------------------------------------------------------------------------
+
+const templatesCollection = (db, siteId) => collection(db, ...featurePath(siteId, EMAIL_TEMPLATES), 'templates')
+
+/** A site's email templates, live. */
+export const watchTemplates = (siteId, onChange, onError) => {
+  const db = getDb()
+  if (!db || !siteId) return () => {}
+  return onSnapshot(
+    templatesCollection(db, siteId),
+    (snapshot) => onChange(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))),
+    onError
+  )
+}
+
+/** Create a template (no id) or replace its content (with id). Returns the id. */
+export const saveTemplate = async (siteId, templateId, values, uid) => {
+  const db = requireDb()
+  const data = { ...cleanTemplate(values), updatedBy: uid, updatedAt: serverTimestamp() }
+  if (templateId) {
+    await updateDoc(doc(templatesCollection(db, siteId), templateId), data)
+    return templateId
+  }
+  const ref = doc(templatesCollection(db, siteId))
+  await setDoc(ref, { ...data, createdAt: serverTimestamp() })
+  return ref.id
+}
+
+export const deleteTemplate = (siteId, templateId) =>
+  deleteDoc(doc(templatesCollection(requireDb(), siteId), templateId))

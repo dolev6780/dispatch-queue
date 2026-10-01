@@ -187,6 +187,20 @@ service cloud.firestore {
         && d.updatedAt == request.time;
     }
 
+    // An email template: a fixed recipient, a subject and a body with blanks.
+    // Senders fill the blanks and send it themselves from Outlook; nothing is
+    // sent from here.
+    function validEmailTemplate(d) {
+      return d.keys().hasOnly(['name', 'to', 'cc', 'subject', 'body', 'createdAt', 'updatedAt', 'updatedBy'])
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 80
+        && d.to is list && d.to.size() > 0 && d.to.size() <= 10
+        && d.cc is list && d.cc.size() <= 10
+        && d.subject is string && d.subject.size() > 0 && d.subject.size() <= 200
+        && d.body is string && d.body.size() > 0 && d.body.size() <= 4000
+        && d.updatedBy == request.auth.uid
+        && d.updatedAt == request.time;
+    }
+
     // A job either has no process, or carries an exact copy of one of this
     // site's processes — title and steps — with every step still unticked.
     function validJobProcess(d, siteId) {
@@ -369,6 +383,14 @@ service cloud.firestore {
 
       // Work processes: the site's step-by-step guides, kept by its
       // administrators and readable by everyone working there.
+      match /features/{featureId}/templates/{templateId} {
+        allow read: if featureId == 'email-templates' && (belongsTo(siteId) || isHomeAdmin(siteId));
+        allow create, update: if featureId == 'email-templates'
+          && isHomeAdmin(siteId)
+          && validEmailTemplate(request.resource.data);
+        allow delete: if isHomeAdmin(siteId);
+      }
+
       match /features/{featureId}/processes/{processId} {
         allow read: if featureId == 'work-processes' && (belongsTo(siteId) || isHomeAdmin(siteId));
         allow create, update: if featureId == 'work-processes'
