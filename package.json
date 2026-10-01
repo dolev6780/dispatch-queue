@@ -8,7 +8,7 @@
     "build": "vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "node src/services/dailyReset.test.mjs && node src/services/schedule.test.mjs && node src/services/credentials.test.mjs && node src/services/logic.test.mjs && node src/services/jobs.test.mjs && node src/services/format.test.mjs && node src/services/processes.test.mjs && node tools/servicenow-watcher.test.mjs && node src/services/servicenow.test.mjs && node tools/servicenow-relay.test.mjs",
+    "test": "node src/services/dailyReset.test.mjs && node src/services/schedule.test.mjs && node src/services/credentials.test.mjs && node src/services/logic.test.mjs && node src/services/jobs.test.mjs && node src/services/format.test.mjs && node src/services/processes.test.mjs && node tools/servicenow-watcher.test.mjs && node src/services/servicenow.test.mjs && node tools/servicenow-relay.test.mjs && node src/services/assistant.test.mjs",
     "rules": "firebase deploy --only firestore:rules",
     "rules:check": "firebase deploy --only firestore:rules --dry-run",
     "test:rules": "firebase emulators:exec --only firestore --project demo-nblab \"node rules-tests/rules.test.mjs\""

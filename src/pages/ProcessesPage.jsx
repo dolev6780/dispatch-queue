@@ -113,7 +113,7 @@ const ProcessDetail = ({ process, canEdit, onEdit, onDelete, onBack }) => {
  * them; the site's administrators write them. A process linked to a job type
  * becomes the checklist on every new job of that type.
  */
-export const ProcessesPage = ({ site, processes, loaded, error, canEdit, uid, isNarrow }) => {
+export const ProcessesPage = ({ site, processes, loaded, error, canEdit, uid, isNarrow, onDraft }) => {
   const [selectedId, setSelectedId] = useState(null)
   const [editing, setEditing] = useState(null) // null | 'new' | process
   const [actionError, setActionError] = useState('')
@@ -220,6 +220,7 @@ export const ProcessesPage = ({ site, processes, loaded, error, canEdit, uid, is
           processes={processes}
           onSave={save}
           onClose={() => setEditing(null)}
+          onDraft={onDraft}
         />
       )}
     </div>

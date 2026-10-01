@@ -1258,6 +1258,108 @@ button.pill-toggle:hover { filter: brightness(0.96); }
 .check-row.is-done .check-box { background: var(--green); border-color: var(--green); color: #fff; }
 .check-row.is-done .check-text { color: var(--ink-2); text-decoration: line-through; text-decoration-color: var(--ink-3); }
 
+/* ---- AI tech assistant --------------------------------------------------------------------------------- */
+.assistant-page { gap: 16px; }
+.assistant-toggle { display: inline-flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; color: var(--ink-2); cursor: pointer; }
+.assistant-off { flex-direction: row; align-items: flex-start; gap: 14px; color: var(--ink-2); }
+.assistant-off svg { flex-shrink: 0; color: var(--accent-text); margin-top: 2px; }
+.assistant-off code, .md code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-sunk);
+  border: 1px solid var(--line);
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+}
+
+.chat { min-height: 320px; gap: 12px; }
+.chat-job {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 8px 8px 12px;
+  border-radius: var(--radius);
+  background: var(--accent-tint);
+  border: 1px solid var(--accent-line);
+  font-size: 14px;
+}
+.chat-job > span { flex: 1; min-width: 0; }
+.chat-job svg { color: var(--accent-text); flex-shrink: 0; }
+.chat-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px 12px;
+  text-align: center;
+  color: var(--ink-3);
+}
+.chat-empty svg { color: var(--accent-text); }
+.chat-suggestions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; max-width: 640px; }
+.chip {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--ink);
+  transition: border-color var(--fast), background var(--fast);
+}
+.chip:hover { border-color: var(--accent); background: var(--accent-tint); }
+
+.chat-log { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+.bubble {
+  max-width: min(760px, 88%);
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 15px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.bubble p { white-space: pre-wrap; }
+.bubble.is-user { align-self: flex-end; background: var(--ink); color: var(--bg); border-bottom-right-radius: 4px; }
+.bubble.is-assistant { align-self: flex-start; background: var(--surface-sunk); border: 1px solid var(--line); border-bottom-left-radius: 4px; }
+.bubble.is-thinking { display: inline-flex; align-items: center; gap: 10px; color: var(--ink-3); }
+.dots { display: inline-flex; gap: 4px; }
+.dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: pulse 1s ease-in-out infinite; }
+.dots i:nth-child(2) { animation-delay: 0.15s; }
+.dots i:nth-child(3) { animation-delay: 0.3s; }
+
+.md { display: flex; flex-direction: column; gap: 8px; }
+.md p { white-space: normal; }
+.md .md-h { font-weight: 700; }
+.md ul, .md ol { padding-inline-start: 22px; display: flex; flex-direction: column; gap: 4px; }
+.md pre {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: var(--night);
+  color: var(--night-ink);
+  overflow-x: auto;
+  font-size: 13px;
+}
+.md pre code { padding: 0; border: none; background: none; color: inherit; font-size: inherit; }
+
+.composer {
+  position: sticky;
+  bottom: 12px;
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  padding: 10px;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+}
+.composer textarea.input { flex: 1; min-height: 46px; max-height: 200px; resize: vertical; }
+.composer .btn { height: 46px; }
+
+.field-action { margin-left: auto; }
+.field-action + .field-count { margin-left: 8px; }
+
 /* ---- Forms ------------------------------------------------------------------------------------------------ */
 .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .field-label {
@@ -1919,6 +2021,8 @@ select.input { cursor: pointer; }
   .q-row .q-ctrl { margin-left: auto; }
 
   .q-aside { display: flex; }
+  .bubble { max-width: 94%; }
+  .assistant-page .page-head-actions { justify-content: space-between; }
   .sn-cards > li { flex-basis: 100%; }
   .sn-groups { display: none; }
   .tool-card { grid-template-columns: auto minmax(0, 1fr); padding: 16px; }

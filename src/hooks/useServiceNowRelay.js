@@ -7,21 +7,12 @@ import { RELAY_POLL_MS, WATCHER_SOURCE, readSnapshot } from '../services/service
  *
  * The relay answers only signed-in NBLAB users, so every request carries the
  * user's Firebase sign-in token. The list is held in memory here, like the
- * relay itself holds it: never stored, never sent to Firebase. On the normal
- * website there is no relay, the first check fails, and this stays quiet.
+ * relay itself holds it: never stored, never sent to Firebase. `isRelay`
+ * comes from useRelayInfo; on the normal website it is false and this stays
+ * quiet.
  */
-export const useServiceNowRelay = (user) => {
-  const [isRelay, setIsRelay] = useState(false)
+export const useServiceNowRelay = (user, isRelay) => {
   const [state, setState] = useState({ snapshot: null, denied: false })
-
-  useEffect(() => {
-    let active = true
-    fetch('api/servicenow/ping', { cache: 'no-store' })
-      .then(res => (res.ok ? res.json() : null))
-      .then(body => { if (active && body?.relay) setIsRelay(true) })
-      .catch(() => {})
-    return () => { active = false }
-  }, [])
 
   useEffect(() => {
     if (!isRelay || !user) return undefined

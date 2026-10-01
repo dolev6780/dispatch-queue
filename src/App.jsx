@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AlertCircle, X } from 'lucide-react'
 import './App.css'
 
@@ -17,6 +17,7 @@ import { SignInPage } from './pages/SignInPage'
 import { SiteSetupPage } from './pages/SiteSetupPage'
 import { AdminPage } from './pages/AdminPage'
 import { ProcessesPage } from './pages/ProcessesPage'
+import { AssistantPage } from './pages/AssistantPage'
 
 import { useHashRoute } from './hooks/useHashRoute'
 import { useAuth } from './hooks/useAuth'
@@ -25,6 +26,7 @@ import { useJobs } from './hooks/useJobs'
 import { useProcesses } from './hooks/useProcesses'
 import { useServiceNowBridge } from './hooks/useServiceNowBridge'
 import { useServiceNowRelay } from './hooks/useServiceNowRelay'
+import { useRelayInfo } from './hooks/useRelayInfo'
 import { useIsNarrow } from './hooks/useMediaQuery'
 import { playShiftSound } from './services/soundEffects'
 import { isFirebaseConfigured } from './services/firebase'
@@ -33,6 +35,7 @@ import { alertKindFor, jobTypeOf, processFields, toggleCheck } from './services/
 import { notificationPermission, requestNotificationPermission } from './services/notify'
 import { toDateKey } from './services/dailyReset'
 import { DISPATCH_QUEUE, WORK_PROCESSES } from './services/features'
+import { askAssistant } from './services/assistantApi'
 import { firstNameOf, formatClockHM, formatShortDate } from './services/format'
 import {
   isGlobalAdmin, isSiteAdminOf, isAnyAdmin, canUseSite, needsSiteSetup,
@@ -312,8 +315,25 @@ function App() {
 
   // Unassigned ServiceNow tasks: from the main PC's relay when this page was
   // opened from it, otherwise from the watcher in this browser (if any).
+  const relayInfo = useRelayInfo()
   const serviceNowBridge = useServiceNowBridge()
-  const serviceNowRelay = useServiceNowRelay(auth.user)
+  const serviceNowRelay = useServiceNowRelay(auth.user, relayInfo.isRelay)
+
+  // The AI tech assistant: only through the main PC's relay, which holds the
+  // Gemini key. A job's "Ask AI" opens it with that job (the seed).
+  const aiAvailable = relayInfo.ai && !!auth.user
+  const [assistantSeed, setAssistantSeed] = useState(null)
+  const askAiAbout = aiAvailable ? (job) => {
+    setChecklistJobId(null)
+    setAssistantSeed({ job })
+    navigate('assistant')
+  } : undefined
+  const clearAssistantSeed = useCallback(() => setAssistantSeed(null), [])
+  const draftProcess = aiAvailable
+    ? async ({ title, jobType, steps }) => (await askAssistant({
+        user: auth.user, mode: 'draft-process', context: { draft: { title, jobType, steps } }
+      })).draft
+    : undefined
   const serviceNow = serviceNowRelay.present ? serviceNowRelay : serviceNowBridge
   const [checklistJobId, setChecklistJobId] = useState(null)
   const checklistJob = jobs.openJobs.find(job => job.id === checklistJobId) || null
@@ -507,6 +527,17 @@ function App() {
         canEdit={isSiteAdminHere}
         uid={auth.user.uid}
         isNarrow={isNarrow}
+        onDraft={draftProcess}
+      />
+    )
+  } else if (route === 'assistant') {
+    content = (
+      <AssistantPage
+        available={aiAvailable}
+        user={auth.user}
+        processes={workProcesses.processes}
+        seed={assistantSeed}
+        onSeedUsed={clearAssistantSeed}
       />
     )
   } else if (route === 'queue') {
@@ -557,6 +588,7 @@ function App() {
         tempUntil={!global && isTempMoveActive(profile, currentTime) ? formatShortDate(lastDayOf(profile.tempEndsAt)) : null}
         onNavigate={navigate}
         serviceNow={serviceNow}
+        relayInfo={relayInfo}
       />
     )
   }
@@ -583,6 +615,7 @@ function App() {
         onSignOut={handleSignOut}
         connection={connection}
         isNarrow={isNarrow}
+        showAssistant={aiAvailable}
       />
 
       {route === 'queue' && (
@@ -596,6 +629,7 @@ function App() {
           onComplete={(jobId) => jobs.complete(jobId, auth.user.uid)}
           onDelete={(jobId) => jobs.remove(jobId)}
           onOpenChecklist={setChecklistJobId}
+          onAskAi={askAiAbout}
           notificationState={notificationState}
           onEnableNotifications={enableDesktopAlerts}
         />
@@ -640,6 +674,7 @@ function App() {
           onTick={(index) => jobs.tick(checklistJob.id, toggleCheck(checklistJob, index))}
           onComplete={() => jobs.complete(checklistJob.id, auth.user.uid)}
           onClose={() => setChecklistJobId(null)}
+          onAskAi={askAiAbout}
         />
       )}
 

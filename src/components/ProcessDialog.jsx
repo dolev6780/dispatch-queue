@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertCircle, ChevronDown, ChevronUp, Plus, X } from 'lucide-react'
+import { AlertCircle, ChevronDown, ChevronUp, Plus, Sparkles, X } from 'lucide-react'
 import { Dialog } from './Dialog'
 import { JOB_TYPES } from '../services/jobs'
 import {
@@ -16,7 +16,7 @@ const row = (text) => ({ key: ++lastRowKey, text })
  * Write or edit a work process: a title, the job type it is a checklist for,
  * the steps in order, and optional notes. Enter in a step adds the next one.
  */
-export const ProcessDialog = ({ process, processes, onSave, onClose }) => {
+export const ProcessDialog = ({ process, processes, onSave, onClose, onDraft }) => {
   const [title, setTitle] = useState(process?.title || '')
   const [jobType, setJobType] = useState(process?.jobType || '')
   const [rows, setRows] = useState(() => (process?.steps?.length ? process.steps : ['']).map(row))
@@ -27,6 +27,24 @@ export const ProcessDialog = ({ process, processes, onSave, onClose }) => {
   const taken = linkedTypes(processes, process?.id)
 
   const steps = rows.map(r => r.text)
+  const [drafting, setDrafting] = useState(false)
+
+  // Gemini suggests the steps from the title (and improves any already
+  // written); the admin edits them before saving.
+  const draftWithAi = async () => {
+    if (!title.trim()) { setError('Give the process a title first — the draft is written from it.'); return }
+    setError('')
+    setDrafting(true)
+    try {
+      const draft = await onDraft({ title, jobType, steps: cleanSteps(steps) })
+      setRows(draft.steps.map(row))
+      if (draft.notes && !notes.trim()) setNotes(draft.notes)
+    } catch (err) {
+      setError(err?.message || 'The draft did not come through.')
+    } finally {
+      setDrafting(false)
+    }
+  }
   const setStep = (index, text) => setRows(list => list.map((r, i) => (i === index ? { ...r, text } : r)))
   const insertAfter = (index) => {
     if (rows.length >= MAX_STEPS) return
@@ -89,6 +107,12 @@ export const ProcessDialog = ({ process, processes, onSave, onClose }) => {
       <div className="field">
         <span className="field-label">
           Steps
+          {onDraft && (
+            <button type="button" className="btn btn-sm btn-ghost field-action" onClick={draftWithAi} disabled={drafting}
+              title={cleanSteps(steps).length ? 'Improve these steps with AI' : 'Draft the steps with AI from the title'}>
+              <Sparkles size={14} /><span>{drafting ? 'Drafting…' : cleanSteps(steps).length ? 'Improve with AI' : 'Draft with AI'}</span>
+            </button>
+          )}
           <span className="field-count">{cleanSteps(steps).length}/{MAX_STEPS}</span>
         </span>
         <ol className="step-editor">

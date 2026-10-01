@@ -1,4 +1,4 @@
-import { Check } from 'lucide-react'
+import { Check, Sparkles } from 'lucide-react'
 import { Dialog } from './Dialog'
 import { JobChip } from './ui'
 import { canFinishJob, canTickJob, checklistOf, jobTypeOf } from '../services/jobs'
@@ -9,7 +9,7 @@ import { firstNameOf } from '../services/format'
  * admin) ticks the steps; the job can be marked done once all are ticked.
  * Everyone else at the site can follow along, read-only.
  */
-export const JobChecklistDialog = ({ job, uid, isSiteAdmin, onTick, onComplete, onClose }) => {
+export const JobChecklistDialog = ({ job, uid, isSiteAdmin, onTick, onComplete, onClose, onAskAi }) => {
   const { steps, checks, done, total, complete } = checklistOf(job)
   const tickable = canTickJob(job, uid, isSiteAdmin)
   const finishable = canFinishJob(job, uid, isSiteAdmin)
@@ -24,6 +24,11 @@ export const JobChecklistDialog = ({ job, uid, isSiteAdmin, onTick, onComplete, 
       footer={(
         <>
           <span className="dialog-foot-start checklist-count mono">{done}/{total} steps</span>
+          {onAskAi && (
+            <button type="button" className="btn btn-ghost" onClick={() => onAskAi(job)}>
+              <Sparkles size={15} /><span>Ask AI</span>
+            </button>
+          )}
           <button type="button" className="btn btn-ghost" onClick={onClose}>Close</button>
           {finishable || tickable ? (
             <button type="button" className="btn btn-primary" disabled={!finishable}

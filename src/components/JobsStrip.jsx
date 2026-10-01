@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { BellRing, Check, ChevronDown, ChevronRight, ListChecks, Plus, Trash2, X } from 'lucide-react'
+import { BellRing, Check, ChevronDown, ChevronRight, ListChecks, Plus, Sparkles, Trash2, X } from 'lucide-react'
 import { JobChip } from './ui'
 import { canDeleteJob, canFinishJob, checklistOf, jobTypeOf, waitingFor } from '../services/jobs'
 import { firstNameOf, formatClockHM } from '../services/format'
 
-const JobCard = ({ job, uid, isSiteAdmin, now, onComplete, onDelete, onOpenChecklist }) => {
+const JobCard = ({ job, uid, isSiteAdmin, now, onComplete, onDelete, onOpenChecklist, onAskAi }) => {
   const [confirming, setConfirming] = useState(false)
   const mine = job.assigneeId === uid
   const title = job.note || jobTypeOf(job.type).label
@@ -27,6 +27,12 @@ const JobCard = ({ job, uid, isSiteAdmin, now, onComplete, onDelete, onOpenCheck
           <button className={`btn btn-sm ${complete ? 'btn-ghost' : 'btn-surface'} steps-btn`} onClick={() => onOpenChecklist(job.id)}
             title={`${job.processTitle} — ${done} of ${total} steps done`}>
             <ListChecks size={14} /><span className="mono">{done}/{total}</span>
+          </button>
+        )}
+        {onAskAi && (
+          <button className="icon-btn is-sm" onClick={() => onAskAi(job)} title="Ask the AI assistant about this job"
+            aria-label="Ask the AI assistant about this job">
+            <Sparkles size={15} />
           </button>
         )}
         {canFinishJob(job, uid, isSiteAdmin) && (
@@ -71,6 +77,7 @@ export const JobsStrip = ({
   onComplete,
   onDelete,
   onOpenChecklist,
+  onAskAi,
   notificationState,
   onEnableNotifications
 }) => {
@@ -89,7 +96,7 @@ export const JobsStrip = ({
     <ul className="job-cards">
       {jobs.map(job => (
         <JobCard key={job.id} job={job} uid={uid} isSiteAdmin={isSiteAdmin} now={now}
-          onComplete={onComplete} onDelete={onDelete} onOpenChecklist={onOpenChecklist} />
+          onComplete={onComplete} onDelete={onDelete} onOpenChecklist={onOpenChecklist} onAskAi={onAskAi} />
       ))}
     </ul>
   )

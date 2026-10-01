@@ -1,4 +1,4 @@
-import { ArrowRight, BellRing, BookOpen, Download, ListOrdered, Network, Plane } from 'lucide-react'
+import { ArrowRight, BellRing, BookOpen, Download, ListOrdered, Network, Plane, Sparkles } from 'lucide-react'
 import { OnDutyCard } from '../components/OnDutyCard'
 import { Eyebrow } from '../components/ui'
 import { FEATURES } from '../services/features'
@@ -60,7 +60,8 @@ export const HomePage = ({
   summaries = {},
   tempUntil,
   onNavigate,
-  serviceNow
+  serviceNow,
+  relayInfo
 }) => {
   const watcher = watcherLine(serviceNow, currentTime)
   return (
@@ -152,6 +153,31 @@ export const HomePage = ({
           <a className="btn btn-outline tool-install" href={RELAY_URL} download="servicenow-relay.mjs">
             <Download size={16} /><span>Download relay</span>
           </a>
+        </div>
+
+        <div className="tool-card">
+          <span className="module-icon"><Sparkles size={20} /></span>
+          <div className="tool-text">
+            <span className="module-name">AI tech assistant</span>
+            <span className="module-desc">
+              Google Gemini answers IT and PC questions step by step, can follow your work processes, helps with a
+              job from its card, and drafts processes for admins. It runs through the relay on the main PC, which
+              keeps the Gemini key — the key is never in this website.
+            </span>
+            <ol className="tool-steps">
+              <li>Get a Gemini API key at <strong>aistudio.google.com</strong>.</li>
+              <li>On the main PC, save it in a file named <code>gemini.key</code> next to <code>servicenow-relay.mjs</code>, then restart the relay.</li>
+              <li>Open the app from the relay&apos;s address — the <strong>Assistant</strong> tab appears.</li>
+            </ol>
+            <span className={`tool-status is-${relayInfo?.ai ? 'ok' : relayInfo?.isRelay ? 'wait' : 'off'}`} role="status">
+              <span className="tool-status-dot" />
+              {relayInfo?.ai
+                ? `On — Gemini (${relayInfo.model}) through the main PC.`
+                : relayInfo?.isRelay
+                  ? 'The main PC is reachable, but its relay has no Gemini key yet.'
+                  : 'Only on pages opened from the main PC\'s relay address.'}
+            </span>
+          </div>
         </div>
       </section>
     </div>

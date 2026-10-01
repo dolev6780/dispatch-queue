@@ -59,6 +59,7 @@ src/
     HomePage.jsx           today at the site in one card, then the modules
     QueuePage.jsx          day bar, on duty, the queue, not in queue, jobs done today (desktop + phone)
     ProcessesPage.jsx      the site's work processes: list, steps, notes; admins write them
+    AssistantPage.jsx      the AI tech assistant: chat with Gemini through the main PC's relay
     SignInPage.jsx         single work-ID field; first-time setup (first global admin + first site)
     SiteSetupPage.jsx      moves a pre-sites database into its first site
     AdminPage.jsx          sites (global); the site's workers — add, role, move, hide, revoke; shift hours
@@ -83,6 +84,8 @@ src/
     queueOps.js            queue list operations by id (pure, tested)
     jobs.js                job types, new-job detection, checklists, who may close a job (pure, tested)
     processes.js           work-process validation, linking to job types (pure, tested)
+    assistant.js           what the AI assistant sends, and its answers read as Markdown (pure, tested)
+    servicenow.js          the ServiceNow list handed over by the watcher or the relay (pure, tested)
     notify.js              desktop notifications (browser Notification API)
     schedule.js            shift arithmetic (pure, tested)
     dailyReset.js          daily reset decision (pure, tested)
@@ -93,13 +96,14 @@ src/
     soundEffects.js        Web Audio turnover chimes
 tools/
   servicenow-watcher.user.js  lab-PC browser script: notifies on new unassigned ServiceNow tasks (tested)
-  servicenow-relay.mjs        main-PC server: shares the unassigned list with the other lab PCs, in memory (tested)
+  servicenow-relay.mjs        main-PC server: shares the unassigned list with the other lab PCs, in memory,
+                              and answers the AI assistant with the Gemini key it keeps (tested)
 rules-tests/
   rules.test.mjs           196-case security-rules suite, run in the Firestore emulator
 ```
 
 ```bash
-npm test             # 353 assertions on the pure logic, no browser or network
+npm test             # 422 assertions on the pure logic, no browser or network
 npm run test:rules   # 196 security-rule cases in the local Firestore emulator (needs Java)
 ```
 
@@ -218,6 +222,23 @@ node servicenow-relay.mjs --site l12      # only people working at site l12 may 
 - **Firewall:** the other PCs can only reach the relay if the main PC's firewall allows incoming connections on port 8787. On a managed PC that may need IT.
 
 The Home page's *Tools for the lab PC* section has the download and these steps, and its status line says whether this PC gets the list from the watcher in this browser or from the main PC.
+
+## AI tech assistant 🤖
+
+An **Assistant** tab where technicians ask IT and PC questions and get step-by-step answers from **Google Gemini** — in Hebrew or English, whichever they write in. It also:
+
+- **follows your work processes** — with *Use our work processes* on (the default), each question carries the site's processes, so answers follow local procedure and name the process they use;
+- **helps on a job** — the ✨ button on a job card (and *Ask AI* in a job's checklist) opens the assistant with that job's type, note and checklist, the question ready to edit;
+- **drafts work processes** — *Draft with AI* in the process editor writes the steps from the title (or *Improve with AI* when steps exist), for the admin to edit before saving.
+
+**The key stays on the main PC.** The site is public, so a key in its code could be copied by anyone. Instead the relay holds it: put the key from [aistudio.google.com](https://aistudio.google.com) in a file named `gemini.key` next to `servicenow-relay.mjs` (or in the `GEMINI_API_KEY` environment variable) and restart the relay. The app sends its question to the relay, the relay asks Gemini and returns the answer — the key never reaches a browser. So the assistant is there only on pages opened from the relay's address, and the tab appears only then.
+
+- **Who may ask:** signed-in NBLAB users only (the same token check as the ServiceNow list), each at most 40 times per 10 minutes.
+- **What is sent:** the conversation, and — when switched on — the site's process titles, steps and notes, or the job's type, note and checklist. Never names, work IDs or who a job is for. The relay logs only the size of each answer, never its content. The page warns not to paste confidential information, and the conversation is kept nowhere: it is gone on reload or *New chat*.
+- **Model:** `gemini-flash-latest` by default, which follows Google's current Flash model; `--model gemini-2.5-flash` picks another. Errors (bad key, unknown model, quota) come back in plain words.
+- **Answers** are Markdown rendered as React elements — never as HTML — so nothing in an answer can run in the page; Hebrew answers read right to left.
+
+`gemini.key` is in `.gitignore`.
 
 ## Firebase 🔥
 

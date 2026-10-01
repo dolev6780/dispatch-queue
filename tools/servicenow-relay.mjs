@@ -3,7 +3,7 @@
  * NBLAB ServiceNow relay — runs on the main lab PC.
  *
  *   node servicenow-relay.mjs            (then leave the window open)
- *   node servicenow-relay.mjs --port 8787 --site l12
+ *   node servicenow-relay.mjs --port 8787 --site l12 --model gemini-2.5-flash
  *
  * The ServiceNow watcher (servicenow-watcher.user.js) on this PC hands the
  * unassigned tasks it sees to this relay. The relay keeps them IN MEMORY only
@@ -22,21 +22,35 @@
  *   - Only this PC can update the list: updates are accepted from this
  *     machine (127.0.0.1) only.
  *
+ * The AI tech assistant
+ * ---------------------
+ * With a Google Gemini API key on this PC — in a file named gemini.key next
+ * to this script, or in the GEMINI_API_KEY environment variable — the relay
+ * also answers the app's AI assistant. The key never leaves this PC: the app
+ * sends its question here, the relay asks Gemini and returns the answer.
+ * Only signed-in NBLAB users can ask, each a limited number of times per ten
+ * minutes. Questions and answers are not stored or logged here; what people
+ * type does go to Google.
+ *
  * Needs Node.js 18 or later; no packages to install.
  */
 
 import http from 'node:http'
 import os from 'node:os'
 import crypto from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 
-export const RELAY_VERSION = '1.0.0'
+export const RELAY_VERSION = '1.1.0'
 export const DEFAULTS = {
   port: 8787,
   projectId: 'nblabmanagment',
   appUrl: 'https://dolev6780.github.io/dispatch-queue/',
   // Optional: only people working at this site id may read the list.
-  site: ''
+  site: '',
+  // Gemini model for the AI assistant. The "-latest" alias follows Google's
+  // current Flash model, so it does not break when an old one is retired.
+  model: 'gemini-flash-latest'
 }
 
 const MAX_BODY = 256 * 1024
@@ -139,8 +153,232 @@ export const parseArgs = (argv) => {
     if (key === 'site') out.site = String(value || '')
     if (key === 'app') out.appUrl = String(value || '')
     if (key === 'project') out.projectId = String(value || '')
+    if (key === 'model') out.model = String(value || '')
+    if (key === 'gemini-key-file') out.geminiKeyFile = String(value || '')
   }
   return out
+}
+
+// ---- The AI assistant (pure parts, tested) ---------------------------------------
+
+export const AI_LIMITS = {
+  messages: 30,
+  messageChars: 4000,
+  processes: 40,
+  steps: 30,
+  stepChars: 200,
+  notesChars: 500,
+  contextChars: 24000,
+  perUserPerTenMinutes: 40
+}
+
+// Keep in step with src/services/jobs.js JOB_TYPES.
+const JOB_LABELS = {
+  'pc-refresh': 'PC Refresh', otr: 'OTR', 'pc-supply': 'PC Supply', incident: 'Incident', 'quick-it': 'Quick IT',
+  'ssd-upgrade': 'SSD Upgrade', 'ram-upgrade': 'RAM Upgrade', 'av-incident': 'AV Incident', 'av-task': 'AV Task'
+}
+
+export const SYSTEM_PROMPT = [
+  'You are the IT and computer-technician assistant of NBLAB, a lab site of a large technology company.',
+  'You help the lab technicians troubleshoot and fix desktops, laptops, docks, monitors, peripherals, printers,',
+  'networking and audio-visual (AV) equipment, and carry out jobs such as PC refreshes, SSD and RAM upgrades,',
+  'PC supply, incidents, quick IT fixes and AV tasks.',
+  '',
+  'How to answer:',
+  '- Be practical and concise. Give procedures as numbered steps.',
+  '- Ask for missing details (model, operating system, exact error message) when they matter.',
+  '- Warn before anything that can lose data or lock a machine (disk formatting, BIOS or firmware changes,',
+  '  BitLocker, re-imaging) and say to back up first.',
+  '- Never ask for, store or repeat passwords, work IDs or personal data. If the user pastes some, do not repeat it.',
+  '- If a step needs company-specific tools or permissions you cannot know, say so and suggest asking the service desk.',
+  '- If the site work processes below are given, follow them, name the process you use, and point out where your advice differs.',
+  '- Answer in the language the user writes in (for example Hebrew or English).'
+].join('\n')
+
+export const DRAFT_PROMPT = [
+  'You write work processes for lab technicians of an IT lab: short, practical, step-by-step guides.',
+  'Return JSON only: {"steps": [...], "notes": "..."}.',
+  '"steps": 5 to 12 steps in order, each one short imperative sentence of at most 200 characters, without numbering.',
+  '"notes": optional tools, safety or contact notes, at most 400 characters; an empty string if none.',
+  'Write in the language of the title.'
+].join('\n')
+
+const clip = (value, max) => String(value ?? '').slice(0, max)
+
+/** The site's processes, cut down to what fits in a question. */
+export const compactProcesses = (list) => {
+  if (!Array.isArray(list)) return []
+  const out = []
+  let used = 0
+  for (const process of list.slice(0, AI_LIMITS.processes)) {
+    const entry = {
+      title: clip(process?.title, 80).trim(),
+      jobType: JOB_LABELS[process?.jobType] || '',
+      steps: (Array.isArray(process?.steps) ? process.steps : []).slice(0, AI_LIMITS.steps).map(step => clip(step, AI_LIMITS.stepChars)),
+      notes: clip(process?.notes, AI_LIMITS.notesChars)
+    }
+    if (!entry.title || entry.steps.length === 0) continue
+    used += JSON.stringify(entry).length
+    if (used > AI_LIMITS.contextChars) break
+    out.push(entry)
+  }
+  return out
+}
+
+/** The job a question is about, if any. */
+export const compactJob = (job) => {
+  if (!job || typeof job !== 'object') return null
+  const steps = (Array.isArray(job.steps) ? job.steps : []).slice(0, AI_LIMITS.steps).map(step => clip(step, AI_LIMITS.stepChars))
+  const checks = Array.isArray(job.checks) ? job.checks : []
+  return {
+    type: JOB_LABELS[job.type] || clip(job.type, 40),
+    note: clip(job.note, 200),
+    processTitle: clip(job.processTitle, 80),
+    steps: steps.map((text, index) => ({ text, done: checks[index] === true }))
+  }
+}
+
+/**
+ * Check what the app sends. Returns { mode, messages, context } — or an
+ * error message for the person asking.
+ */
+export const normaliseChatRequest = (body) => {
+  if (!body || typeof body !== 'object') return 'That was not a question.'
+  const mode = body.mode === 'draft-process' ? 'draft-process' : 'chat'
+  const context = { processes: compactProcesses(body.context?.processes), job: compactJob(body.context?.job), draft: null }
+
+  if (mode === 'draft-process') {
+    const draft = body.context?.draft || {}
+    context.draft = {
+      title: clip(draft.title, 80).trim(),
+      jobType: JOB_LABELS[draft.jobType] || '',
+      steps: (Array.isArray(draft.steps) ? draft.steps : []).map(step => clip(step, AI_LIMITS.stepChars).trim()).filter(Boolean).slice(0, AI_LIMITS.steps)
+    }
+    if (!context.draft.title) return 'Give the process a title first.'
+    return { mode, messages: [], context }
+  }
+
+  const messages = (Array.isArray(body.messages) ? body.messages : [])
+    .slice(-AI_LIMITS.messages)
+    .map(message => ({ role: message?.role === 'assistant' ? 'assistant' : 'user', text: clip(message?.text, AI_LIMITS.messageChars).trim() }))
+    .filter(message => message.text)
+  if (messages.length === 0 || messages[messages.length - 1].role !== 'user') return 'Ask a question.'
+  return { mode, messages, context }
+}
+
+const processesText = (processes) => processes.map(process => [
+  `### ${process.title}${process.jobType ? ` (checklist for ${process.jobType} jobs)` : ''}`,
+  ...process.steps.map((step, index) => `${index + 1}. ${step}`),
+  ...(process.notes ? [`Notes: ${process.notes}`] : [])
+].join('\n')).join('\n\n')
+
+const jobText = (job) => [
+  `Type: ${job.type}`,
+  ...(job.note ? [`Note: ${job.note}`] : []),
+  ...(job.steps.length
+    ? [`Checklist (${job.processTitle || 'work process'}):`, ...job.steps.map((step, index) => `${index + 1}. [${step.done ? 'done' : 'to do'}] ${step.text}`)]
+    : [])
+].join('\n')
+
+/** The request for Gemini's generateContent. */
+export const buildGeminiRequest = ({ mode, messages, context }) => {
+  if (mode === 'draft-process') {
+    const { title, jobType, steps } = context.draft
+    const ask = [
+      `Title: ${title}`,
+      ...(jobType ? [`Used as the checklist for ${jobType} jobs.`] : []),
+      ...(steps.length ? ['Current steps — improve them:', ...steps.map((step, index) => `${index + 1}. ${step}`)] : [])
+    ].join('\n')
+    return {
+      systemInstruction: { parts: [{ text: DRAFT_PROMPT }] },
+      contents: [{ role: 'user', parts: [{ text: ask }] }],
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 1024,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: 'OBJECT',
+          properties: { steps: { type: 'ARRAY', items: { type: 'STRING' } }, notes: { type: 'STRING' } },
+          required: ['steps']
+        }
+      }
+    }
+  }
+
+  const system = [SYSTEM_PROMPT]
+  if (context.processes.length) system.push(`Work processes of this site:\n\n${processesText(context.processes)}`)
+  if (context.job) system.push(`The technician is asking about this job:\n${jobText(context.job)}`)
+
+  // Gemini wants the conversation to start with the user and alternate.
+  const contents = []
+  for (const message of messages) {
+    const role = message.role === 'assistant' ? 'model' : 'user'
+    if (contents.length === 0 && role === 'model') continue
+    const last = contents[contents.length - 1]
+    if (last && last.role === role) last.parts[0].text += `\n\n${message.text}`
+    else contents.push({ role, parts: [{ text: message.text }] })
+  }
+  return {
+    systemInstruction: { parts: [{ text: system.join('\n\n') }] },
+    contents,
+    generationConfig: { temperature: 0.4, maxOutputTokens: 2048 }
+  }
+}
+
+/** Gemini's answer as text; throws a message for the person asking. */
+export const parseGeminiResponse = (json) => {
+  if (json?.promptFeedback?.blockReason) throw new Error('Gemini would not answer that question.')
+  const candidate = json?.candidates?.[0]
+  const text = (candidate?.content?.parts || []).map(part => part?.text || '').join('').trim()
+  if (text) return text
+  if (candidate?.finishReason === 'SAFETY') throw new Error('Gemini would not answer that question.')
+  throw new Error('Gemini gave no answer — try asking differently.')
+}
+
+/** A drafted process: clean steps (no numbering) and notes. */
+export const parseDraft = (text) => {
+  let data = null
+  try { data = JSON.parse(String(text).replace(/^```(?:json)?\s*|\s*```$/g, '')) } catch { /* below */ }
+  const steps = (Array.isArray(data?.steps) ? data.steps : [])
+    .map(step => clip(step, AI_LIMITS.stepChars).replace(/^\s*(\d+[.)]|[-*•])\s*/, '').trim())
+    .filter(Boolean)
+    .slice(0, AI_LIMITS.steps)
+  if (steps.length === 0) throw new Error('The draft came back empty — try a clearer title.')
+  return { steps, notes: clip(data?.notes, AI_LIMITS.notesChars).trim() }
+}
+
+/** What went wrong with Gemini, in words for the person asking. */
+export const geminiErrorMessage = (status, json, model) => {
+  const reason = JSON.stringify(json?.error || '')
+  if (status === 400 && /API_KEY_INVALID|API key not valid/i.test(reason)) return 'The Gemini key on the main PC is not valid.'
+  if (status === 403) return 'The Gemini key on the main PC may not use this model.'
+  if (status === 404) return `Gemini has no model "${model}" — start the relay with --model gemini-2.5-flash.`
+  if (status === 429) return 'Gemini is busy or the free quota is used up — try again in a minute.'
+  if (status >= 500) return 'Gemini is not answering right now — try again.'
+  return `Gemini refused the request (${status}).`
+}
+
+/** At most `limit` uses per `windowMs` for each person. */
+export const createRateLimiter = (limit, windowMs) => {
+  const uses = new Map()
+  return (uid, now = Date.now()) => {
+    const recent = (uses.get(uid) || []).filter(at => now - at < windowMs)
+    if (recent.length >= limit) { uses.set(uid, recent); return false }
+    recent.push(now)
+    uses.set(uid, recent)
+    return true
+  }
+}
+
+/** The Gemini key: the environment first, then the key file. Never printed. */
+export const loadGeminiKey = ({ env = {}, readFile = () => '' } = {}) => {
+  const fromEnv = String(env.GEMINI_API_KEY || '').trim()
+  if (fromEnv) return fromEnv
+  try {
+    return String(readFile() || '').trim()
+  } catch {
+    return ''
+  }
 }
 
 // ---- The server ---------------------------------------------------------------------
@@ -209,6 +447,23 @@ const appFetcher = (appUrl) => {
   }
 }
 
+/** Ask Gemini. The key goes in a header, never in a URL or a log. */
+const geminiCaller = ({ key, model }) => async (payload) => {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 60000)
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    })
+    return { status: res.status, json: await res.json().catch(() => ({})) }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 /**
  * Build the relay. Dependencies are injectable so the tests can run it
  * without Google, Firestore or the live site.
@@ -218,33 +473,68 @@ export const createRelay = ({
   getCerts = googleCerts(),
   getProfile = firestoreProfile(config.projectId),
   fetchApp = appFetcher(config.appUrl),
+  geminiKey = '',
+  callGemini = geminiCaller({ key: geminiKey, model: config.model || DEFAULTS.model }),
   log = () => {}
 } = {}) => {
   let latest = { snapshot: null, receivedAt: 0 }
   const allowed = new Map() // uid -> { ok, until }
+  const model = config.model || DEFAULTS.model
+  const mayAsk = createRateLimiter(AI_LIMITS.perUserPerTenMinutes, 10 * 60 * 1000)
 
+  /** { status: 200 | 401 | 403, uid } */
   const authorize = async (req) => {
     const token = /^Bearer (.+)$/.exec(req.headers.authorization || '')?.[1]
-    if (!token) return 401
+    if (!token) return { status: 401 }
     let uid
     try {
       uid = await verifyIdToken(token, { projectId: config.projectId, getCerts })
     } catch {
-      return 401
+      return { status: 401 }
     }
     const cached = allowed.get(uid)
-    if (cached && Date.now() < cached.until) return cached.ok ? 200 : 403
+    if (cached && Date.now() < cached.until) return { status: cached.ok ? 200 : 403, uid }
     const profile = await getProfile(uid, token)
     const ok = mayRead(profile, config.site, Date.now())
     allowed.set(uid, { ok, until: Date.now() + PROFILE_CACHE_MS })
-    return ok ? 200 : 403
+    return { status: ok ? 200 : 403, uid }
   }
+
+  const refuse = (res, status) => send(res, status, { error: status === 401 ? 'Sign in to NBLAB.' : 'Not allowed.' })
 
   return http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://relay')
     try {
       if (url.pathname === '/api/servicenow/ping') {
-        return send(res, 200, { relay: true, version: RELAY_VERSION })
+        return send(res, 200, { relay: true, version: RELAY_VERSION, ai: !!geminiKey, model: geminiKey ? model : null })
+      }
+
+      if (url.pathname === '/api/ai/chat') {
+        if (req.method !== 'POST') return send(res, 405, { error: 'method' })
+        const auth = await authorize(req)
+        if (auth.status !== 200) return refuse(res, auth.status)
+        if (!geminiKey) return send(res, 503, { error: 'The AI assistant is not set up on the main PC.' })
+        const body = await readBody(req)
+        if (body === null) return send(res, 413, { error: 'That is too long.' })
+        let parsed = null
+        try { parsed = JSON.parse(body) } catch { /* not JSON */ }
+        const request = normaliseChatRequest(parsed)
+        if (typeof request === 'string') return send(res, 400, { error: request })
+        if (!mayAsk(auth.uid)) return send(res, 429, { error: 'Too many questions in a short time — wait a few minutes.' })
+        const answer = await callGemini(buildGeminiRequest(request))
+        if (answer.status !== 200) {
+          log(`assistant: Gemini answered ${answer.status}`)
+          return send(res, 502, { error: geminiErrorMessage(answer.status, answer.json, model) })
+        }
+        let text
+        try {
+          text = parseGeminiResponse(answer.json)
+          // Only the size is logged — never what was asked or answered.
+          log(`assistant: ${request.mode}, ${text.length} characters`)
+          return send(res, 200, request.mode === 'draft-process' ? { draft: parseDraft(text) } : { text })
+        } catch (err) {
+          return send(res, 502, { error: err.message })
+        }
       }
 
       if (url.pathname === '/api/servicenow') {
@@ -263,8 +553,8 @@ export const createRelay = ({
           return send(res, 204, '')
         }
         if (req.method === 'GET') {
-          const status = await authorize(req)
-          if (status !== 200) return send(res, status, { error: status === 401 ? 'sign in to NBLAB' : 'not allowed' })
+          const auth = await authorize(req)
+          if (auth.status !== 200) return refuse(res, auth.status)
           return send(res, 200, latest)
         }
         return send(res, 405, { error: 'method' })
@@ -299,7 +589,9 @@ const addresses = (port) => {
 const start = () => {
   const config = { ...DEFAULTS, ...parseArgs(process.argv.slice(2)) }
   const stamp = () => new Date().toLocaleTimeString([], { hour12: false })
-  const server = createRelay({ config, log: (line) => console.log(`[${stamp()}] ${line}`) })
+  const keyFile = config.geminiKeyFile || new URL('./gemini.key', import.meta.url)
+  const geminiKey = loadGeminiKey({ env: process.env, readFile: () => readFileSync(keyFile, 'utf8') })
+  const server = createRelay({ config, geminiKey, log: (line) => console.log(`[${stamp()}] ${line}`) })
   server.on('error', (err) => {
     console.error(err.code === 'EADDRINUSE'
       ? `Port ${config.port} is already in use. Is the relay already running? Or start it with --port 8788.`
@@ -315,6 +607,10 @@ const start = () => {
     console.log('On this PC, keep ServiceNow open in the browser with the watcher installed.')
     if (config.site) console.log(`Only people working at site "${config.site}" can see the list.`)
     console.log('Nothing is written to disk; the list lives only while this window is open.')
+    console.log('')
+    console.log(geminiKey
+      ? `AI assistant: on (Gemini model ${config.model}). The key stays on this PC.`
+      : 'AI assistant: off. To turn it on, put your Gemini API key in a file named gemini.key next to this script and restart.')
   })
 }
 

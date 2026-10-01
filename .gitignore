@@ -34,3 +34,6 @@ ui-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+# The AI assistant's Gemini key lives only on the main PC, next to the relay.
+gemini.key

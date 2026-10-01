@@ -71,10 +71,15 @@ export const AppBar = ({
   onSwitchSite,
   onSignOut,
   connection,
-  isNarrow
+  isNarrow,
+  showAssistant
 }) => {
   const [menuOpen, setMenuOpen] = useState(false)
-  const tabs = canAdminister ? [...BASE_TABS, { id: 'admin', label: 'Admin' }] : BASE_TABS
+  const tabs = [
+    ...BASE_TABS,
+    ...(showAssistant ? [{ id: 'assistant', label: 'Assistant' }] : []),
+    ...(canAdminister ? [{ id: 'admin', label: 'Admin' }] : [])
+  ]
   const name = session?.name || 'Account'
   const ThemeIcon = theme === 'dark' ? Sun : Moon
   const themeTitle = `Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`
