@@ -7,8 +7,7 @@ import { bridgeStatus } from '../services/servicenow'
 // what makes Tampermonkey offer to install it.
 const WATCHER_URL = `${import.meta.env.BASE_URL}servicenow-watcher.user.js`
 const RELAY_URL = `${import.meta.env.BASE_URL}servicenow-relay.mjs`
-const AGENT_URL = `${import.meta.env.BASE_URL}nblab-automation.ps1`
-const STARTER_URL = `${import.meta.env.BASE_URL}nblab-automation.cmd`
+const AGENT_URL = `${import.meta.env.BASE_URL}nblab-automation.cmd`
 
 /** Where the ServiceNow watcher stands for THIS browser, in words. */
 const watcherLine = (bridge, now) => {
@@ -212,30 +211,24 @@ export const SettingsPage = ({
           <div className="tool-text">
             <span className="module-name">Dispatch automation agent</span>
             <span className="module-desc">
-              On every lab PC that receives Grab &amp; Go files: watches the Downloads folder, reads each new file,
-              and prints what its automation says (Automation page). A Windows PowerShell script — nothing to
-              install — and nothing leaves the PC.
+              On every lab PC that handles Grab &amp; Go returns: listens to a folder, reads each new file, and prints
+              what its automation on the Automation page says. One file, nothing to install, and nothing leaves the PC.
             </span>
             <ol className="tool-steps">
-              <li>Press <strong>Download agent</strong> and <strong>Download starter</strong>, and put both files in one folder on the PC, e.g. <code>Documents\NBLAB</code>.</li>
-              <li>On the Automation page, press <strong>Export for the PCs</strong> and save <code>automations.json</code> in the shared folder. Put the documents to print (like <code>LDO.pdf</code>) in a <code>documents</code> folder next to it.</li>
-              <li>Double-click <code>nblab-automation.cmd</code>. It creates <code>nblab-automation.config.json</code> — open it from the tray icon (<em>Open settings</em>), set <code>sharedFolder</code> and <code>stickerPrinter</code>, and start it again.</li>
-              <li>To start it at every sign-in, put a shortcut to <code>nblab-automation.cmd</code> in the Startup folder (Win+R, <code>shell:startup</code>).</li>
+              <li>Press <strong>Download</strong> and double-click <code>nblab-automation.cmd</code>.</li>
+              <li>In the window: your <strong>work ID</strong>, the <strong>folder to listen to</strong>, the folder with the <strong>files to print</strong>, and the <strong>sticker printer</strong>. Press <em>Save and start</em>.</li>
+              <li>Put the files to print (like <code>LDO.pdf</code>) in that folder, named as in the automations.</li>
             </ol>
             <span className="tool-note">
-              Try a file without printing: <code>powershell -ExecutionPolicy Bypass -File nblab-automation.ps1 -Test "path\to\file.pdf"</code>,
-              or set <code>dryRun</code> to <code>true</code>. PDFs print through the PC&apos;s PDF app (it needs a Print command, like Adobe
-              Reader). If company policy blocks scripts, IT has to allow it. After changing automations, export again.
+              It then runs next to the clock and starts with Windows; changes on the Automation page reach it by themselves.
+              Right-click its icon for the settings or the log. Try a file without printing:
+              <code>nblab-automation.cmd -Test "C:\path\to\file.pdf"</code>. PDFs print through the PC&apos;s PDF app (it needs a
+              Print command, like Adobe Reader). If company policy blocks scripts, IT has to allow it.
             </span>
           </div>
-          <div className="tool-install tool-downloads">
-            <a className="btn btn-dark" href={AGENT_URL} download="nblab-automation.ps1">
-              <Download size={16} /><span>Download agent</span>
-            </a>
-            <a className="btn btn-outline" href={STARTER_URL} download="nblab-automation.cmd">
-              <Download size={16} /><span>Download starter</span>
-            </a>
-          </div>
+          <a className="btn btn-dark tool-install" href={AGENT_URL} download="nblab-automation.cmd">
+            <Download size={16} /><span>Download</span>
+          </a>
         </div>
 
         <div className="tool-card">

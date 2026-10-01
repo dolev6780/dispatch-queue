@@ -4,9 +4,9 @@
  * An automation says: when a file arrives on a lab PC whose CONTENT holds all
  * these keywords, print the file itself, these documents, and a sticker whose
  * lines are filled with details read from the file. The automation agent on
- * each PC (tools/nblab-automation.ps1) does the work from an exported copy;
- * matchAutomation, readFields and fillSticker here are its rules, mirrored so
- * the website can try them on pasted text. Keep the two in step.
+ * each PC (tools/nblab-automation.ps1) reads them from the website and does
+ * the work; matchAutomation, readFields and fillSticker here are its rules,
+ * mirrored so the website can try them on pasted text. Keep the two in step.
  */
 
 export const LIMITS = {
@@ -27,9 +27,6 @@ export const LIMITS = {
 
 /** Always available on a sticker, whatever the file holds. */
 export const BUILTIN_FIELDS = ['file', 'date', 'time', 'automation']
-
-/** The file the website exports and the agent reads. */
-export const EXPORT_FILE_NAME = 'automations.json'
 
 export const emptyAutomation = () => ({
   name: '',
@@ -165,11 +162,3 @@ export const builtinValues = ({ fileName, automationName, now }) => {
     automation: automationName || ''
   }
 }
-
-/** What the agent reads: the site's automations, without database bookkeeping. */
-export const exportForAgent = (automations, { siteName, exportedAt }) => ({
-  version: 1,
-  site: siteName || '',
-  exportedAt: exportedAt.toISOString(),
-  automations: (automations || []).map(automation => ({ id: automation.id, ...cleanAutomation(automation) }))
-})

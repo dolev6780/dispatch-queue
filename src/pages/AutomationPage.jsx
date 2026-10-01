@@ -1,23 +1,10 @@
 import { useState } from 'react'
-import { AlertCircle, Check, Download, FileDown, FileText, Pencil, Plus, Printer, Tag, Trash2, X } from 'lucide-react'
+import { AlertCircle, Check, Download, FileText, Pencil, Plus, Printer, Tag, Trash2, X } from 'lucide-react'
 import { Eyebrow } from '../components/ui'
 import { AutomationDialog } from '../components/AutomationDialog'
 import { deleteAutomation, saveAutomation } from '../services/db'
-import {
-  EXPORT_FILE_NAME, automationSummary, builtinValues, cleanAutomation, exportForAgent, fillSticker, matchAutomation, readFields
-} from '../services/automation'
+import { automationSummary, builtinValues, cleanAutomation, fillSticker, matchAutomation, readFields } from '../services/automation'
 import { siteLabel } from '../services/format'
-
-/** Save the automations as the file the lab PCs read. */
-const downloadExport = (automations, site) => {
-  const data = exportForAgent(automations, { siteName: siteLabel(site), exportedAt: new Date() })
-  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }))
-  const link = document.createElement('a')
-  link.href = url
-  link.download = EXPORT_FILE_NAME
-  link.click()
-  setTimeout(() => URL.revokeObjectURL(url), 1000)
-}
 
 const StickerPreview = ({ lines }) => (
   <div className="sticker-preview" aria-label="Sticker">
@@ -67,10 +54,10 @@ const AutomationCard = ({ automation, canEdit, onEdit, onToggle, onDelete }) => 
 }
 
 /**
- * Dispatch automation: what the lab PCs print when a Grab & Go file
- * downloads. Admins write the automations here and export them for the PCs;
- * the automation agent on each PC (Settings → Lab PC tools) does the
- * printing. "Try it" runs the same matching on pasted text, right here.
+ * Dispatch automation: what the lab PCs print when a Grab & Go file arrives.
+ * Admins write the automations here; the agent on each PC (Settings → Lab PC
+ * tools) reads them from the website by itself and does the printing. "Try
+ * it" runs the same matching on pasted text, right here.
  */
 export const AutomationPage = ({ site, automations, loaded, error, canEdit, uid }) => {
   const [editing, setEditing] = useState(null) // null | 'new' | automation
@@ -108,10 +95,6 @@ export const AutomationPage = ({ site, automations, loaded, error, canEdit, uid 
           </p>
         </div>
         <div className="page-head-actions">
-          <button className="btn btn-outline" onClick={() => downloadExport(automations, site)} disabled={!automations.length}
-            title={`Save ${EXPORT_FILE_NAME} for the lab PCs`}>
-            <FileDown size={16} /><span>Export for the PCs</span>
-          </button>
           {canEdit && (
             <button className="btn btn-dark" onClick={() => setEditing('new')}>
               <Plus size={16} /><span>New automation</span>
@@ -121,9 +104,9 @@ export const AutomationPage = ({ site, automations, loaded, error, canEdit, uid 
       </header>
 
       <ol className="auto-how" aria-label="How it works">
-        <li><Download size={16} /><span>A Grab &amp; Go file downloads on a lab PC</span></li>
+        <li><Download size={16} /><span>A Grab &amp; Go file arrives in the folder a lab PC listens to</span></li>
         <li><FileText size={16} /><span>The agent reads it and finds the automation whose words are all in it</span></li>
-        <li><Printer size={16} /><span>It prints the file, the documents, and the sticker</span></li>
+        <li><Printer size={16} /><span>It prints the file, the files to print from that PC, and the sticker</span></li>
       </ol>
 
       {(error || actionError) && <p className="alert" role="alert"><AlertCircle size={16} /><span>{actionError || error}</span></p>}
@@ -162,7 +145,7 @@ export const AutomationPage = ({ site, automations, loaded, error, canEdit, uid 
         </div>
         <p className="field-hint">
           Paste the text of a Grab &amp; Go file to see which automation the PCs would use and what they would print.
-          Nothing is printed or saved. For PDFs, run the agent&apos;s test on a PC (Settings → Lab PC tools).
+          Nothing is printed or saved. For a PDF, run <code>nblab-automation.cmd -Test &quot;file.pdf&quot;</code> on a lab PC.
         </p>
         <div className="field-pair">
           <textarea className="input is-mono" rows={7} value={sample} onChange={e => setSample(e.target.value)}

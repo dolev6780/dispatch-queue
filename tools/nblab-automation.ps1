@@ -3,48 +3,62 @@
   NBLAB dispatch automation agent - runs on each lab PC.
 
 .DESCRIPTION
-  Watches a folder (your Downloads, unless set otherwise). When a file finishes
-  downloading there, it reads the text inside the file, finds the first
-  automation whose words are ALL in it, and prints what that automation says:
-  the file itself, documents from the shared folder, and a sticker on the
-  sticker printer with details read from the file.
+  Listens to one folder on this PC. When a file finishes arriving there, it
+  reads the text inside the file, finds the first automation whose words are
+  ALL in it, and prints what that automation says: the file itself, files from
+  this PC's print-files folder (the LDO form etc.), and a sticker on the sticker
+  printer with details read from the file.
 
-  The automations come from automations.json, exported from the NBLAB website
-  (Dispatch automation page). Nothing is sent anywhere; every run is written to
-  nblab-automation.log next to this script.
+  The automations are written on the NBLAB website (Automation page). The agent
+  signs in once with a work ID and reads them from there by itself, so a change
+  on the website reaches every PC. Nothing is sent anywhere else.
 
-  Settings live in nblab-automation.config.json next to this script, created on
-  the first run:
-    watchFolder     the folder to watch (default: your Downloads)
-    sharedFolder    where automations.json and the "documents" folder are: a
-                    folder on this PC or a network share (\\server\share\nblab).
-                    Empty means: next to this script.
-    stickerPrinter  the sticker printer's name, exactly as Windows shows it
-    dryRun          true = only write to the log what would be printed
+  It is published as nblab-automation.cmd: double-click it. The first time, a
+  window asks for a work ID, the folder to listen to, the folder with the files
+  to print, and the sticker printer. Settings, the sign-in and the log are kept
+  in %LOCALAPPDATA%\NBLAB\automation. The work ID itself is never stored; the
+  sign-in is kept encrypted for this Windows user only.
 
 .EXAMPLE
-  powershell -ExecutionPolicy Bypass -File nblab-automation.ps1
-  Start watching (nblab-automation.cmd does this, hidden).
+  nblab-automation.cmd
+  Start. The setup window opens the first time; after that it runs in the tray.
 
 .EXAMPLE
-  powershell -ExecutionPolicy Bypass -File nblab-automation.ps1 -Test "$env:USERPROFILE\Downloads\return.pdf"
-  Show what the agent reads from a file, which automation matches, and what it
+  nblab-automation.cmd -Setup
+  Change the settings.
+
+.EXAMPLE
+  nblab-automation.cmd -Test "C:\Users\me\Downloads\return.pdf"
+  Show what the agent reads from a file, which automation matches and what it
   would print - without printing anything.
 #>
 param(
   [string]$Test,
+  [switch]$Setup,
   [switch]$DryRun,
+  # The .cmd this runs from, passed by the .cmd - for "start when I sign in".
+  [string]$Self,
   # Load the functions only; used by nblab-automation.test.ps1.
   [switch]$Library
 )
 
 Set-StrictMode -Version 2
 $ErrorActionPreference = 'Stop'
+# Google's servers need TLS 1.2, which Windows PowerShell 5.1 does not use by default.
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-$AgentVersion = '1.0.0'
-$AgentFolder = $PSScriptRoot
-$ConfigPath = Join-Path $AgentFolder 'nblab-automation.config.json'
-$LogPath = Join-Path $AgentFolder 'nblab-automation.log'
+$AgentVersion = '2.0.0'
+# Filled in when the website is built (vite.config.js) with the same public
+# Firebase settings the website uses.
+$FirebaseApiKey = '__NBLAB_FIREBASE_API_KEY__'
+$FirebaseProject = '__NBLAB_FIREBASE_PROJECT_ID__'
+$EmailDomain = 'nblab.local'
+
+$DataFolder = Join-Path $env:LOCALAPPDATA 'NBLAB\automation'
+$ConfigPath = Join-Path $DataFolder 'settings.json'
+$LogPath = Join-Path $DataFolder 'automation.log'
+$CachePath = Join-Path $DataFolder 'automations-cache.json'
+$StableCopy = Join-Path $DataFolder 'nblab-automation.cmd'
 $TempExtensions = @('.crdownload', '.part', '.partial', '.tmp', '.download', '.opdownload', '.!ut')
 $MaxFileBytes = 50MB
 $ValueLimit = 80
@@ -343,38 +357,215 @@ function Format-Sticker($Lines, $Values) {
   })
 }
 
-function Read-Automations([string]$Path) {
-  if (-not (Test-Path -LiteralPath $Path)) { throw "No automations file at $Path. Export it from the NBLAB website (Dispatch automation page)." }
-  $data = [System.IO.File]::ReadAllText($Path) | ConvertFrom-Json
-  if ($data.version -ne 1) { throw "Unknown automations file version '$($data.version)'." }
-  return @($data.automations)
+function Get-Prop($Object, [string]$Name) {
+  # A property that may be missing - strict mode would throw on it.
+  if ($null -ne $Object -and $Object.PSObject.Properties[$Name]) { return $Object.$Name }
+  return $null
 }
 
-# ---- Settings, log, notices --------------------------------------------------------
+function ConvertTo-Automation($Object, [string]$Id) {
+  # Every field present, whatever the source - the rules below rely on it.
+  $docs = @(foreach ($doc in @(Get-Prop $Object 'documents')) {
+    $file = Get-Prop $doc 'file'
+    if ($file) { [pscustomobject]@{ file = [string]$file; copies = [Math]::Min(5, [Math]::Max(1, [int](Get-Prop $doc 'copies'))) } }
+  })
+  $fields = @(foreach ($field in @(Get-Prop $Object 'stickerFields')) {
+    $name = Get-Prop $field 'name'
+    if ($name) { [pscustomobject]@{ name = [string]$name; label = [string](Get-Prop $field 'label') } }
+  })
+  return [pscustomobject]@{
+    id = $Id
+    name = [string](Get-Prop $Object 'name')
+    enabled = ((Get-Prop $Object 'enabled') -ne $false)
+    keywords = @(@(Get-Prop $Object 'keywords') | Where-Object { $_ } | ForEach-Object { [string]$_ })
+    fileTypes = @(@(Get-Prop $Object 'fileTypes') | Where-Object { $_ } | ForEach-Object { ([string]$_).ToLowerInvariant() })
+    printFile = [bool](Get-Prop $Object 'printFile')
+    fileCopies = [Math]::Min(5, [Math]::Max(1, [int](Get-Prop $Object 'fileCopies')))
+    documents = $docs
+    sticker = [bool](Get-Prop $Object 'sticker')
+    stickerLines = @(@(Get-Prop $Object 'stickerLines') | ForEach-Object { [string]$_ })
+    stickerFields = $fields
+  }
+}
+
+# ---- Signing in: the same work-ID sign-in as the website -------------------------------
+
+function Test-WorkId([string]$WorkId) {
+  # src/services/credentials.js validateWwid
+  $id = $WorkId.Trim().ToUpperInvariant()
+  if (-not $id) { return 'Enter your work ID.' }
+  if ($id.Length -lt 3) { return 'The work ID must be at least 3 characters.' }
+  if ($id -notmatch '^[A-Z0-9._-]+$') { return 'Use only letters, numbers, dots, dashes or underscores.' }
+  return $null
+}
+
+function Get-WorkIdCredentials([string]$WorkId) {
+  # src/services/credentials.js: email from the work ID, password = SHA-256 of
+  # the namespaced work ID, hex, first 32 characters.
+  $id = $WorkId.Trim().ToUpperInvariant()
+  $sha = [System.Security.Cryptography.SHA256]::Create()
+  try { $bytes = $sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes("nblab-dispatch-credential:$id")) } finally { $sha.Dispose() }
+  $hex = -join ($bytes | ForEach-Object { $_.ToString('x2') })
+  return @{ email = "$($id.ToLowerInvariant())@$EmailDomain"; password = $hex.Substring(0, 32) }
+}
+
+function Get-FirebaseErrorMessage([string]$Body) {
+  $code = ''
+  try { $code = [string]((ConvertFrom-Json $Body).error.message) } catch { }
+  if ($code -match 'INVALID_LOGIN_CREDENTIALS|INVALID_PASSWORD|EMAIL_NOT_FOUND|INVALID_EMAIL') { return 'That work ID was not recognised.' }
+  if ($code -match 'USER_DISABLED') { return 'This account is disabled.' }
+  if ($code -match 'TOO_MANY_ATTEMPTS') { return 'Too many attempts. Wait a moment and try again.' }
+  if ($code -match 'TOKEN_EXPIRED|INVALID_REFRESH_TOKEN|USER_NOT_FOUND') { return 'The sign-in on this PC has expired. Open the settings and enter the work ID again.' }
+  if ($code -match 'API key not valid') { return 'This copy of the agent is not set up for the NBLAB website. Download it again from the website.' }
+  if ($code) { return "The server said: $code" }
+  return 'No connection to the server.'
+}
+
+function Invoke-Firebase([string]$Method, [string]$Uri, $Body, [string]$ContentType = 'application/json', $Headers = @{}) {
+  try {
+    if ($null -eq $Body) { return Invoke-RestMethod -Method $Method -Uri $Uri -Headers $Headers }
+    return Invoke-RestMethod -Method $Method -Uri $Uri -Headers $Headers -ContentType $ContentType -Body $Body
+  } catch {
+    # The server's explanation: in ErrorDetails on newer PowerShell, in the
+    # response itself on Windows PowerShell 5.1.
+    $details = ''
+    if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $details = $_.ErrorDetails.Message }
+    elseif ($_.Exception.PSObject.Properties['Response'] -and $_.Exception.Response) {
+      try {
+        $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+        $details = $reader.ReadToEnd()
+        $reader.Dispose()
+      } catch { }
+    }
+    throw (Get-FirebaseErrorMessage $details)
+  }
+}
+
+function Invoke-FirebaseSignIn([string]$WorkId) {
+  $credentials = Get-WorkIdCredentials $WorkId
+  $body = @{ email = $credentials.email; password = $credentials.password; returnSecureToken = $true } | ConvertTo-Json
+  $r = Invoke-Firebase 'Post' "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=$FirebaseApiKey" $body
+  $script:Session = @{ uid = $r.localId; idToken = $r.idToken; expires = (Get-Date).AddSeconds([int]$r.expiresIn - 60) }
+  return @{ uid = [string]$r.localId; email = [string]$r.email; refreshToken = [string]$r.refreshToken }
+}
+
+function Protect-Text([string]$Text) {
+  # Windows DPAPI: only this Windows user on this PC can read it back.
+  return ConvertFrom-SecureString (ConvertTo-SecureString $Text -AsPlainText -Force)
+}
+
+function Unprotect-Text([string]$Blob) {
+  $secure = ConvertTo-SecureString $Blob
+  $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+  try { return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr) } finally { [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr) }
+}
+
+$script:Session = $null
+function Get-IdToken($Config) {
+  if ($script:Session -and (Get-Date) -lt $script:Session.expires) { return $script:Session.idToken }
+  $refresh = Unprotect-Text $Config.refreshToken
+  $r = Invoke-Firebase 'Post' "https://securetoken.googleapis.com/v1/token?key=$FirebaseApiKey" ("grant_type=refresh_token&refresh_token=" + [uri]::EscapeDataString($refresh)) 'application/x-www-form-urlencoded'
+  $script:Session = @{ uid = [string]$r.user_id; idToken = [string]$r.id_token; expires = (Get-Date).AddSeconds([int]$r.expires_in - 60) }
+  return $script:Session.idToken
+}
+
+# ---- Reading the automations from the website ------------------------------------------
+
+function ConvertFrom-FirestoreValue($Value) {
+  if ($null -eq $Value) { return $null }
+  $p = @($Value.PSObject.Properties)[0]
+  if (-not $p) { return $null }
+  switch ($p.Name) {
+    'stringValue' { return [string]$p.Value }
+    'booleanValue' { return [bool]$p.Value }
+    'integerValue' { return [long]$p.Value }
+    'doubleValue' { return [double]$p.Value }
+    'timestampValue' { return ([DateTimeOffset]::Parse([string]$p.Value, [Globalization.CultureInfo]::InvariantCulture)).UtcDateTime }
+    'arrayValue' { return ,@(foreach ($v in @(Get-Prop $p.Value 'values')) { if ($null -ne $v) { ConvertFrom-FirestoreValue $v } }) }
+    'mapValue' { return ConvertFrom-FirestoreFields (Get-Prop $p.Value 'fields') }
+    default { return $null }
+  }
+}
+
+function ConvertFrom-FirestoreFields($Fields) {
+  $out = [ordered]@{}
+  if ($null -ne $Fields) { foreach ($f in $Fields.PSObject.Properties) { $out[$f.Name] = ConvertFrom-FirestoreValue $f.Value } }
+  return [pscustomobject]$out
+}
+
+function Get-CurrentSite($Me, [datetime]$Now) {
+  # src/services/roles.js currentSiteOf: a temporary move counts until it ends.
+  $temp = Get-Prop $Me 'tempSiteId'
+  $ends = Get-Prop $Me 'tempEndsAt'
+  if ($temp -and $ends -and $Now.ToUniversalTime() -lt ([datetime]$ends).ToUniversalTime()) { return [string]$temp }
+  return [string](Get-Prop $Me 'siteId')
+}
+
+function Get-WebsiteAutomations($Config) {
+  $token = Get-IdToken $Config
+  $headers = @{ Authorization = "Bearer $token" }
+  $base = "https://firestore.googleapis.com/v1/projects/$FirebaseProject/databases/(default)/documents"
+  $me = ConvertFrom-FirestoreFields (Get-Prop (Invoke-Firebase 'Get' "$base/users/$($script:Session.uid)" $null 'application/json' $headers) 'fields')
+  $site = Get-CurrentSite $me (Get-Date)
+  if (-not $site) { throw 'This account has no site yet. Ask an administrator.' }
+  $list = Invoke-Firebase 'Get' "$base/sites/$site/features/dispatch-automation/automations?pageSize=100" $null 'application/json' $headers
+  $automations = @(foreach ($doc in @(Get-Prop $list 'documents')) {
+    if ($doc) { ConvertTo-Automation (ConvertFrom-FirestoreFields (Get-Prop $doc 'fields')) (([string]$doc.name) -split '/')[-1] }
+  }) | Sort-Object name
+  return @{ site = $site; person = [string](Get-Prop $me 'name'); automations = @($automations) }
+}
+
+function Get-Automations($Config) {
+  # The website first; if it cannot be reached, the copy from the last time it could.
+  if ($env:NBLAB_AUTOMATIONS_FILE) {
+    # For testing without signing in.
+    $data = [System.IO.File]::ReadAllText($env:NBLAB_AUTOMATIONS_FILE) | ConvertFrom-Json
+    return @{ site = 'test'; person = ''; from = 'file'; automations = @(foreach ($a in @($data.automations)) { ConvertTo-Automation $a ([string](Get-Prop $a 'id')) }) }
+  }
+  try {
+    $fresh = Get-WebsiteAutomations $Config
+    $fresh.from = 'website'
+    @{ site = $fresh.site; person = $fresh.person; automations = $fresh.automations } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $CachePath -Encoding UTF8
+    return $fresh
+  } catch {
+    $problem = $_.Exception.Message
+    if (Test-Path -LiteralPath $CachePath) {
+      $cached = [System.IO.File]::ReadAllText($CachePath) | ConvertFrom-Json
+      Write-AgentLog "Using the saved automations ($problem)"
+      return @{ site = [string]$cached.site; person = [string]$cached.person; from = 'saved copy'; automations = @(foreach ($a in @($cached.automations)) { ConvertTo-Automation $a ([string](Get-Prop $a 'id')) }) }
+    }
+    throw $problem
+  }
+}
+
+# ---- Settings, log, notices --------------------------------------------------------------
 
 function Get-AgentConfig {
-  $defaults = [ordered]@{
+  if (-not (Test-Path -LiteralPath $ConfigPath)) { return $null }
+  $saved = [System.IO.File]::ReadAllText($ConfigPath) | ConvertFrom-Json
+  $config = @{
     watchFolder = (Join-Path $env:USERPROFILE 'Downloads')
-    sharedFolder = ''
+    filesFolder = (Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'NBLAB print files')
     stickerPrinter = ''
     dryRun = $false
+    startAtSignIn = $true
+    email = ''
+    refreshToken = ''
   }
-  if (-not (Test-Path -LiteralPath $ConfigPath)) {
-    ($defaults | ConvertTo-Json) | Set-Content -LiteralPath $ConfigPath -Encoding UTF8
+  foreach ($key in @($config.Keys)) {
+    $value = Get-Prop $saved $key
+    if ($null -ne $value -and "$value" -ne '') { $config[$key] = $value }
   }
-  $saved = [System.IO.File]::ReadAllText($ConfigPath) | ConvertFrom-Json
-  $config = @{}
-  foreach ($key in $defaults.Keys) {
-    $value = $defaults[$key]
-    if ($saved.PSObject.Properties[$key] -and "$($saved.$key)" -ne '') { $value = $saved.$key }
-    if ($value -is [string]) { $value = [Environment]::ExpandEnvironmentVariables($value) }
-    $config[$key] = $value
-  }
-  if (-not $config.sharedFolder) { $config.sharedFolder = $AgentFolder }
   return $config
 }
 
+function Save-AgentConfig($Config) {
+  New-Item -ItemType Directory -Force -Path $DataFolder | Out-Null
+  $Config | ConvertTo-Json | Set-Content -LiteralPath $ConfigPath -Encoding UTF8
+}
+
 function Write-AgentLog([string]$Message) {
+  New-Item -ItemType Directory -Force -Path (Split-Path -Parent $LogPath) | Out-Null
   $line = '{0}  {1}' -f (Get-Date).ToString('yyyy-MM-dd HH:mm:ss'), $Message
   Add-Content -LiteralPath $LogPath -Value $line -Encoding UTF8
   Write-Host $line
@@ -384,6 +575,188 @@ $script:Tray = $null
 function Show-Notice([string]$Title, [string]$Text, [string]$Kind = 'Info') {
   if (-not $script:Tray) { return }
   $script:Tray.ShowBalloonTip(6000, $Title, $Text, [System.Windows.Forms.ToolTipIcon]::$Kind)
+}
+
+function Set-StartAtSignIn([bool]$On) {
+  # A shortcut in the Startup folder to a copy of the .cmd kept with the
+  # settings, so moving or deleting the download does not break it.
+  $link = Join-Path ([Environment]::GetFolderPath('Startup')) 'NBLAB automation.lnk'
+  if (-not $On) {
+    if (Test-Path -LiteralPath $link) { Remove-Item -LiteralPath $link -Force }
+    return
+  }
+  if ($Self -and (Test-Path -LiteralPath $Self) -and ((Resolve-Path -LiteralPath $Self).Path -ne $StableCopy)) {
+    Copy-Item -LiteralPath $Self -Destination $StableCopy -Force
+  }
+  if (-not (Test-Path -LiteralPath $StableCopy)) { return }
+  $shell = New-Object -ComObject WScript.Shell
+  $shortcut = $shell.CreateShortcut($link)
+  $shortcut.TargetPath = $StableCopy
+  $shortcut.WorkingDirectory = $DataFolder
+  $shortcut.WindowStyle = 7
+  $shortcut.Description = 'NBLAB dispatch automation'
+  $shortcut.Save()
+}
+
+# ---- The setup window ----------------------------------------------------------------------
+
+function New-SetupForm($Config) {
+  Add-Type -AssemblyName System.Windows.Forms
+  Add-Type -AssemblyName System.Drawing
+  [System.Windows.Forms.Application]::EnableVisualStyles()
+  $font = New-Object System.Drawing.Font('Segoe UI', 9.5)
+  $form = New-Object System.Windows.Forms.Form
+  $form.Text = 'NBLAB dispatch automation'
+  $form.Font = $font
+  $form.FormBorderStyle = 'FixedDialog'
+  $form.MaximizeBox = $false
+  $form.MinimizeBox = $false
+  $form.StartPosition = 'CenterScreen'
+  $form.ClientSize = New-Object System.Drawing.Size(560, 420)
+  $form.TopMost = $true
+
+  $y = 16
+  $add = {
+    param($Control, [int]$X, [int]$Width, [int]$Height = 24)
+    $Control.Location = New-Object System.Drawing.Point($X, $script:SetupY)
+    $Control.Size = New-Object System.Drawing.Size($Width, $Height)
+    $form.Controls.Add($Control)
+    $Control
+  }
+  $script:SetupY = $y
+  $title = New-Object System.Windows.Forms.Label
+  $title.Text = 'When a file arrives in the folder below, this PC prints what its automation on the NBLAB website says.'
+  [void](& $add $title 16 528 36)
+
+  $controls = @{}
+  $row = {
+    param([string]$Caption, $Control, [int]$Width = 380)
+    $script:SetupY += 44
+    $label = New-Object System.Windows.Forms.Label
+    $label.Text = $Caption
+    $label.TextAlign = 'MiddleLeft'
+    [void](& $add $label 16 128)
+    [void](& $add $Control 148 $Width)
+  }
+
+  $controls.workId = New-Object System.Windows.Forms.TextBox
+  $controls.workId.UseSystemPasswordChar = $true
+  & $row 'Work ID' $controls.workId 200
+  $controls.signedIn = New-Object System.Windows.Forms.Label
+  $controls.signedIn.ForeColor = [System.Drawing.Color]::DimGray
+  $controls.signedIn.Text = if ($Config -and $Config.email) { "Signed in as $(($Config.email -split '@')[0].ToUpperInvariant()) - leave empty to keep it" } else { 'Signs in once; the work ID itself is not saved' }
+  $controls.signedIn.Location = New-Object System.Drawing.Point(356, $script:SetupY)
+  $controls.signedIn.Size = New-Object System.Drawing.Size(196, 32)
+  $form.Controls.Add($controls.signedIn)
+
+  $folderRow = {
+    param([string]$Caption, [string]$Value, [string]$Key)
+    $box = New-Object System.Windows.Forms.TextBox
+    $box.Text = $Value
+    & $row $Caption $box 300
+    $browse = New-Object System.Windows.Forms.Button
+    $browse.Text = 'Browse...'
+    $browse.Location = New-Object System.Drawing.Point(456, ($script:SetupY - 1))
+    $browse.Size = New-Object System.Drawing.Size(88, 26)
+    $browse.Tag = $box
+    $browse.Add_Click({
+      param($button)
+      $dialog = New-Object System.Windows.Forms.FolderBrowserDialog
+      $dialog.SelectedPath = $button.Tag.Text
+      if ($dialog.ShowDialog() -eq 'OK') { $button.Tag.Text = $dialog.SelectedPath }
+    })
+    $form.Controls.Add($browse)
+    $controls[$Key] = $box
+  }
+  $watch = if ($Config) { $Config.watchFolder } else { Join-Path $env:USERPROFILE 'Downloads' }
+  $files = if ($Config) { $Config.filesFolder } else { Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'NBLAB print files' }
+  & $folderRow 'Folder to listen to' $watch 'watchFolder'
+  & $folderRow 'Files to print are in' $files 'filesFolder'
+
+  $controls.stickerPrinter = New-Object System.Windows.Forms.ComboBox
+  $controls.stickerPrinter.DropDownStyle = 'DropDownList'
+  [void]$controls.stickerPrinter.Items.Add('(no sticker printer)')
+  foreach ($printer in [System.Drawing.Printing.PrinterSettings]::InstalledPrinters) { [void]$controls.stickerPrinter.Items.Add($printer) }
+  $current = if ($Config -and $Config.stickerPrinter) { $Config.stickerPrinter } else { '(no sticker printer)' }
+  $controls.stickerPrinter.SelectedItem = $current
+  if ($controls.stickerPrinter.SelectedIndex -lt 0) { $controls.stickerPrinter.SelectedIndex = 0 }
+  & $row 'Sticker printer' $controls.stickerPrinter 300
+
+  $script:SetupY += 44
+  $controls.startAtSignIn = New-Object System.Windows.Forms.CheckBox
+  $controls.startAtSignIn.Text = 'Start when I sign in to Windows'
+  $controls.startAtSignIn.Checked = if ($Config) { [bool]$Config.startAtSignIn } else { $true }
+  [void](& $add $controls.startAtSignIn 148 300)
+
+  $script:SetupY += 36
+  $controls.problem = New-Object System.Windows.Forms.Label
+  $controls.problem.ForeColor = [System.Drawing.Color]::Firebrick
+  [void](& $add $controls.problem 16 528 40)
+
+  $controls.save = New-Object System.Windows.Forms.Button
+  $controls.save.Text = 'Save and start'
+  $controls.save.Location = New-Object System.Drawing.Point(316, 372)
+  $controls.save.Size = New-Object System.Drawing.Size(128, 32)
+  $form.Controls.Add($controls.save)
+  $form.AcceptButton = $controls.save
+  $controls.cancel = New-Object System.Windows.Forms.Button
+  $controls.cancel.Text = 'Cancel'
+  $controls.cancel.DialogResult = 'Cancel'
+  $controls.cancel.Location = New-Object System.Drawing.Point(452, 372)
+  $controls.cancel.Size = New-Object System.Drawing.Size(92, 32)
+  $form.Controls.Add($controls.cancel)
+  $form.CancelButton = $controls.cancel
+  return @{ form = $form; controls = $controls }
+}
+
+function Show-SetupWindow($Config) {
+  # Returns the new settings, or $null when cancelled.
+  $window = New-SetupForm $Config
+  $c = $window.controls
+  $script:SetupResult = $null
+  $c.save.Add_Click({
+    $c.problem.Text = ''
+    $watch = $c.watchFolder.Text.Trim()
+    $files = $c.filesFolder.Text.Trim()
+    if (-not (Test-Path -LiteralPath $watch -PathType Container)) { $c.problem.Text = 'The folder to listen to does not exist.'; return }
+    if (-not $files) { $c.problem.Text = 'Choose the folder with the files to print.'; return }
+    if (-not (Test-Path -LiteralPath $files)) { New-Item -ItemType Directory -Force -Path $files | Out-Null }
+    $result = @{
+      watchFolder = $watch
+      filesFolder = $files
+      stickerPrinter = if ($c.stickerPrinter.SelectedIndex -le 0) { '' } else { [string]$c.stickerPrinter.SelectedItem }
+      dryRun = if ($Config) { [bool]$Config.dryRun } else { $false }
+      startAtSignIn = $c.startAtSignIn.Checked
+      email = if ($Config) { $Config.email } else { '' }
+      refreshToken = if ($Config) { $Config.refreshToken } else { '' }
+    }
+    $workId = $c.workId.Text
+    if ($workId.Trim() -or -not $result.refreshToken) {
+      $problem = Test-WorkId $workId
+      if ($problem) { $c.problem.Text = $problem; return }
+      try {
+        $c.save.Enabled = $false
+        $c.problem.Text = 'Signing in...'
+        [System.Windows.Forms.Application]::DoEvents()
+        $signedIn = Invoke-FirebaseSignIn $workId
+        $result.email = $signedIn.email
+        $result.refreshToken = Protect-Text $signedIn.refreshToken
+      } catch {
+        $c.problem.Text = $_.Exception.Message
+        $c.save.Enabled = $true
+        return
+      }
+    }
+    $script:SetupResult = $result
+    $window.form.DialogResult = 'OK'
+    $window.form.Close()
+  })
+  [void]$window.form.ShowDialog()
+  $window.form.Dispose()
+  if (-not $script:SetupResult) { return $null }
+  Save-AgentConfig $script:SetupResult
+  try { Set-StartAtSignIn ([bool]$script:SetupResult.startAtSignIn) } catch { Write-AgentLog "Could not set start at sign-in: $($_.Exception.Message)" }
+  return (Get-AgentConfig)
 }
 
 # ---- Printing ------------------------------------------------------------------------
@@ -448,17 +821,16 @@ function Wait-FileReady([string]$Path, [int]$TimeoutSeconds = 90) {
   return $false
 }
 
-function Get-Plan([string]$Path, $Config) {
+function Get-Plan([string]$Path, $Config, $Automations) {
   $name = [System.IO.Path]::GetFileName($Path)
   $text = Get-FileText $Path
-  $automations = Read-Automations (Join-Path $Config.sharedFolder 'automations.json')
-  $automation = Find-Automation $text $name $automations
+  $automation = Find-Automation $text $name $Automations
   if (-not $automation) { return @{ file = $name; text = $text; automation = $null } }
   $values = Read-Fields $text $automation.stickerFields
   $builtins = Get-BuiltinValues $name $automation.name (Get-Date)
   foreach ($key in $builtins.Keys) { $values[$key] = $builtins[$key] }
   $documents = @(foreach ($doc in @($automation.documents)) {
-    if ($doc -and $doc.file) { @{ path = (Join-Path (Join-Path $Config.sharedFolder 'documents') $doc.file); copies = [int]$doc.copies } }
+    if ($doc -and $doc.file) { @{ path = (Join-Path $Config.filesFolder $doc.file); copies = [int]$doc.copies } }
   })
   return @{
     file = $name
@@ -473,8 +845,8 @@ function Get-Plan([string]$Path, $Config) {
   }
 }
 
-function Invoke-Automation([string]$Path, $Config) {
-  $plan = Get-Plan $Path $Config
+function Invoke-Automation([string]$Path, $Config, $Automations) {
+  $plan = Get-Plan $Path $Config $Automations
   if (-not $plan.automation) { Write-AgentLog "No automation for $($plan.file)"; return }
   $dry = [bool]$Config.dryRun
   Write-AgentLog "'$($plan.automation.name)' for $($plan.file)"
@@ -485,11 +857,11 @@ function Invoke-Automation([string]$Path, $Config) {
   }
   foreach ($doc in $plan.documents) {
     $docName = Split-Path -Leaf $doc.path
-    if (-not (Test-Path -LiteralPath $doc.path)) { $problems += "$docName is not in the documents folder"; continue }
+    if (-not (Test-Path -LiteralPath $doc.path)) { $problems += "$docName is not in $($Config.filesFolder)"; continue }
     try { Invoke-PrintFile $doc.path $doc.copies $dry; $done += $docName } catch { $problems += "${docName}: $($_.Exception.Message)" }
   }
   if ($plan.sticker) {
-    if (-not $Config.stickerPrinter) { $problems += 'no sticker printer is set' }
+    if (-not $Config.stickerPrinter) { $problems += 'no sticker printer is chosen in the settings' }
     else {
       try { Invoke-PrintSticker $Config.stickerPrinter $plan.stickerLines $dry ''; $done += 'sticker' } catch { $problems += "sticker: $($_.Exception.Message)" }
     }
@@ -507,14 +879,17 @@ function Invoke-Automation([string]$Path, $Config) {
 
 if ($Library) { return }
 
-# ---- Test mode: read a file and say what would happen ------------------------------------------
+# ---- Start ------------------------------------------------------------------------------------------
 
+New-Item -ItemType Directory -Force -Path $DataFolder | Out-Null
 $config = Get-AgentConfig
-if ($DryRun) { $config.dryRun = $true }
 
 if ($Test) {
-  $plan = Get-Plan (Resolve-Path -LiteralPath $Test).Path $config
+  if (-not $config) { Write-Host 'Not set up yet: double-click nblab-automation.cmd first.' -ForegroundColor Yellow; exit 1 }
+  $loaded = Get-Automations $config
+  $plan = Get-Plan (Resolve-Path -LiteralPath $Test).Path $config $loaded.automations
   Write-Host "NBLAB automation agent $AgentVersion - test of $($plan.file)" -ForegroundColor Cyan
+  Write-Host "$($loaded.automations.Count) automations for site $($loaded.site), from the $($loaded.from)"
   Write-Host "`n--- Text read from the file (first 1500 characters) ---"
   $preview = $plan.text
   if ($preview.Length -gt 1500) { $preview = $preview.Substring(0, 1500) + ' ...' }
@@ -532,42 +907,78 @@ if ($Test) {
   exit 0
 }
 
-# ---- Watching -------------------------------------------------------------------------------------
-
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-if (-not (Test-Path -LiteralPath $config.watchFolder)) {
-  Write-AgentLog "PROBLEM: the folder to watch does not exist: $($config.watchFolder) - fix watchFolder in $ConfigPath"
+# One agent per Windows user: a second double-click opens the settings instead.
+$created = $false
+$mutex = New-Object System.Threading.Mutex($true, 'NBLAB-dispatch-automation', [ref]$created)
+if (-not $created) {
+  [void][System.Windows.Forms.MessageBox]::Show('NBLAB automation is already running. Right-click its icon next to the clock for the settings.', 'NBLAB automation')
+  exit 0
+}
+
+if (-not $config -or $Setup -or -not $config.refreshToken) {
+  $config = Show-SetupWindow $config
+  if (-not $config) { exit 0 }
+}
+if ($DryRun) { $config.dryRun = $true }
+
+try { $loaded = Get-Automations $config }
+catch {
+  [void][System.Windows.Forms.MessageBox]::Show("Could not read the automations from the NBLAB website:`n$($_.Exception.Message)", 'NBLAB automation')
   exit 1
 }
 
 $script:Tray = New-Object System.Windows.Forms.NotifyIcon
 $script:Tray.Icon = [System.Drawing.SystemIcons]::Information
-$script:Tray.Text = 'NBLAB automation - watching ' + (Split-Path -Leaf $config.watchFolder)
 $script:Tray.Visible = $true
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
-[void]$menu.Items.Add('Open log', $null, { Start-Process notepad.exe $LogPath })
-[void]$menu.Items.Add('Open settings', $null, { Start-Process notepad.exe $ConfigPath })
 $script:Stop = $false
-[void]$menu.Items.Add('Stop watching', $null, { $script:Stop = $true })
+$script:Reconfigure = $false
+[void]$menu.Items.Add('Settings...', $null, { $script:Reconfigure = $true })
+[void]$menu.Items.Add('Open the log', $null, { Start-Process notepad.exe $LogPath })
+[void]$menu.Items.Add('Open the files to print', $null, { Start-Process explorer.exe $config.filesFolder })
+[void]$menu.Items.Add('Stop', $null, { $script:Stop = $true })
 $script:Tray.ContextMenuStrip = $menu
 
-$watcher = New-Object System.IO.FileSystemWatcher $config.watchFolder
-$watcher.IncludeSubdirectories = $false
-$watcher.NotifyFilter = [System.IO.NotifyFilters]'FileName, LastWrite, Size'
-Register-ObjectEvent $watcher Created -SourceIdentifier 'nblab.created' | Out-Null
-Register-ObjectEvent $watcher Renamed -SourceIdentifier 'nblab.renamed' | Out-Null
-$watcher.EnableRaisingEvents = $true
+$script:Watcher = $null
+function Start-Watching($Config) {
+  Stop-Watching
+  $script:Watcher = New-Object System.IO.FileSystemWatcher $Config.watchFolder
+  $script:Watcher.IncludeSubdirectories = $false
+  $script:Watcher.NotifyFilter = [System.IO.NotifyFilters]'FileName, LastWrite, Size'
+  Register-ObjectEvent $script:Watcher Created -SourceIdentifier 'nblab.created' | Out-Null
+  Register-ObjectEvent $script:Watcher Renamed -SourceIdentifier 'nblab.renamed' | Out-Null
+  $script:Watcher.EnableRaisingEvents = $true
+  $script:Tray.Text = 'NBLAB automation - ' + (Split-Path -Leaf $Config.watchFolder)
+  $mode = if ($Config.dryRun) { ' (DRY RUN - nothing is printed)' } else { '' }
+  Write-AgentLog "Agent $AgentVersion listening to $($Config.watchFolder); files to print in $($Config.filesFolder)$mode"
+}
+function Stop-Watching {
+  Unregister-Event -SourceIdentifier 'nblab.created' -ErrorAction SilentlyContinue
+  Unregister-Event -SourceIdentifier 'nblab.renamed' -ErrorAction SilentlyContinue
+  Get-Event | Remove-Event
+  if ($script:Watcher) { $script:Watcher.Dispose(); $script:Watcher = $null }
+}
 
-$mode = if ($config.dryRun) { ' (DRY RUN - nothing is printed)' } else { '' }
-Write-AgentLog "Agent $AgentVersion watching $($config.watchFolder); automations and documents in $($config.sharedFolder)$mode"
-Show-Notice 'NBLAB automation' "Watching $($config.watchFolder)$mode"
+Start-Watching $config
+Show-Notice 'NBLAB automation' ("Listening to $(Split-Path -Leaf $config.watchFolder) - $($loaded.automations.Count) automations for $($loaded.site)")
 
 $recent = @{}
 try {
   while (-not $script:Stop) {
     [System.Windows.Forms.Application]::DoEvents()
+    if ($script:Reconfigure) {
+      $script:Reconfigure = $false
+      $changed = Show-SetupWindow $config
+      if ($changed) {
+        $config = $changed
+        $script:Session = $null
+        Start-Watching $config
+        Show-Notice 'NBLAB automation' "Listening to $(Split-Path -Leaf $config.watchFolder)"
+      }
+    }
     $change = Wait-Event -Timeout 1
     if (-not $change) { continue }
     $path = $change.SourceEventArgs.FullPath
@@ -579,17 +990,19 @@ try {
     if ($recent.ContainsKey($path) -and ((Get-Date) - $recent[$path]).TotalSeconds -lt 60) { continue }
     $recent[$path] = Get-Date
     if (-not (Wait-FileReady $path)) { continue }
-    try { Invoke-Automation $path $config }
-    catch {
+    try {
+      # The newest automations every time, so a change on the website counts at once.
+      $loaded = Get-Automations $config
+      Invoke-Automation $path $config $loaded.automations
+    } catch {
       Write-AgentLog "PROBLEM with ${name}: $($_.Exception.Message)"
       Show-Notice 'NBLAB automation' "Could not handle ${name}: $($_.Exception.Message)" 'Error'
     }
   }
 } finally {
-  Unregister-Event -SourceIdentifier 'nblab.created' -ErrorAction SilentlyContinue
-  Unregister-Event -SourceIdentifier 'nblab.renamed' -ErrorAction SilentlyContinue
-  $watcher.Dispose()
+  Stop-Watching
   $script:Tray.Visible = $false
   $script:Tray.Dispose()
+  $mutex.ReleaseMutex()
   Write-AgentLog 'Agent stopped'
 }

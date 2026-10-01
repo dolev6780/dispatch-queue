@@ -1,6 +1,6 @@
 import {
   cleanAutomation, validateAutomation, emptyAutomation, splitList, placeholdersIn, unknownPlaceholders,
-  automationSummary, matchAutomation, readField, readFields, fillSticker, builtinValues, exportForAgent, LIMITS
+  automationSummary, matchAutomation, readField, readFields, fillSticker, builtinValues, LIMITS
 } from './automation.js'
 
 let pass = 0
@@ -75,12 +75,6 @@ const values = { ...readFields(text, base.stickerFields), ...builtinValues({ fil
 eq('lines filled in', fillSticker(base.stickerLines, values), ['RITM0012345', 'Asset NB-48213', '01/10/2026'])
 eq('placeholders in any case', fillSticker(['{TICKET}'], values), ['RITM0012345'])
 eq('an unknown placeholder is left empty', fillSticker(['[{nothing}]'], values), ['[]'])
-
-console.log('--- export for the PCs ---')
-const exported = exportForAgent([{ id: 'a1', ...base, updatedAt: 'x', updatedBy: 'u' }], { siteName: 'L12', exportedAt: new Date(Date.UTC(2026, 9, 1)) })
-eq('versioned, with the site and time', [exported.version, exported.site, exported.exportedAt], [1, 'L12', '2026-10-01T00:00:00.000Z'])
-eq('no database bookkeeping', Object.keys(exported.automations[0]).includes('updatedBy'), false)
-eq('keeps the id for the log', exported.automations[0].id, 'a1')
 
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

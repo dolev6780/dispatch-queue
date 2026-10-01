@@ -123,38 +123,81 @@ try {
     Eq 'a Windows PDF: the sticker was printed to a file' ((Get-Item $winPdf).Length -gt 0) $true
     Eq 'a Windows PDF: keywords are found' (($winText -match 'Grab') -and ($winText -match 'return')) $true
     Eq 'a Windows PDF: a detail after its label' (Read-Field $winText 'Asset tag') 'NB-48213'
-    Copy-Item $winPdf (Join-Path ([System.IO.Path]::GetTempPath()) 'nblab-sticker-test.pdf') -Force
   } else {
     Write-Host '  (skipped: no "Microsoft Print to PDF" printer here)'
   }
 
   Write-Host '--- the whole plan, dry run ---'
-  $shared = Join-Path $work 'shared'
-  New-Item -ItemType Directory -Path (Join-Path $shared 'documents') | Out-Null
-  [System.IO.File]::WriteAllText((Join-Path $shared 'documents\LDO.pdf'), '%PDF-1.4 placeholder')
-  $export = @{
-    version = 1; site = 'L12'; exportedAt = '2026-10-01T00:00:00Z'
-    automations = @(@{
-      id = 'a1'; name = 'Grab & Go return'; enabled = $true; keywords = @('Grab & Go', 'Return'); fileTypes = @()
-      printFile = $true; fileCopies = 1; documents = @(@{ file = 'LDO.pdf'; copies = 2 }, @{ file = 'Missing.pdf'; copies = 1 })
-      sticker = $true; stickerLines = @('{ticket}', 'Asset {asset}'); stickerFields = @(@{ name = 'ticket'; label = 'Ticket' }, @{ name = 'asset'; label = 'Asset tag' })
-      notes = ''
-    })
-  }
-  [System.IO.File]::WriteAllText((Join-Path $shared 'automations.json'), ($export | ConvertTo-Json -Depth 6))
-  $config = @{ watchFolder = $work; sharedFolder = $shared; stickerPrinter = 'Label printer'; dryRun = $true }
-  $plan = Get-Plan $txt $config
+  $files = Join-Path $work 'print files'
+  New-Item -ItemType Directory -Path $files | Out-Null
+  [System.IO.File]::WriteAllText((Join-Path $files 'LDO.pdf'), '%PDF-1.4 placeholder')
+  $automations = @(ConvertTo-Automation ([pscustomobject]@{
+    name = 'Grab & Go return'; enabled = $true; keywords = @('Grab & Go', 'Return'); fileTypes = @()
+    printFile = $true; fileCopies = 1
+    documents = @([pscustomobject]@{ file = 'LDO.pdf'; copies = 2 }, [pscustomobject]@{ file = 'Missing.pdf'; copies = 1 })
+    sticker = $true; stickerLines = @('{ticket}', 'Asset {asset}')
+    stickerFields = @([pscustomobject]@{ name = 'ticket'; label = 'Ticket' }, [pscustomobject]@{ name = 'asset'; label = 'Asset tag' })
+  }) 'a1')
+  $config = @{ watchFolder = $work; filesFolder = $files; stickerPrinter = 'Label printer'; dryRun = $true }
+  $plan = Get-Plan $txt $config $automations
   Eq 'the plan: the matching automation' $plan.automation.name 'Grab & Go return'
   Eq 'the plan: the sticker lines' $plan.stickerLines @('RITM0012345', 'Asset NB-48213')
-  Eq 'the plan: documents from the shared folder' (@($plan.documents | ForEach-Object { Split-Path -Leaf $_.path })) @('LDO.pdf', 'Missing.pdf')
+  Eq 'the plan: files from the print-files folder' (@($plan.documents | ForEach-Object { $_.path })) @((Join-Path $files 'LDO.pdf'), (Join-Path $files 'Missing.pdf'))
   $script:LogPath = Join-Path $work 'test.log'
-  Invoke-Automation $txt $config
+  Invoke-Automation $txt $config $automations
   $log = Get-Content $script:LogPath -Raw
   Eq 'a dry run logs the file it would print' ($log -match 'would print .*return\.txt') $true
-  Eq 'a dry run logs each copy of a document' ([regex]::Matches($log, 'would print .*LDO\.pdf').Count) 2
+  Eq 'a dry run logs each copy of a file to print' ([regex]::Matches($log, 'would print .*LDO\.pdf').Count) 2
   Eq 'a dry run logs the sticker' ($log -match "sticker on 'Label printer': RITM0012345 \| Asset NB-48213") $true
-  Eq 'a missing document is reported, not fatal' ($log -match 'PROBLEM: Missing\.pdf is not in the documents folder') $true
-  Eq 'a file that matches nothing is only logged' ((Get-Plan $csvFile @{ sharedFolder = $shared }).automation) $null
+  Eq 'a missing file to print is reported, not fatal' ($log -match 'PROBLEM: Missing\.pdf is not in') $true
+  Eq 'a file that matches nothing is only logged' ((Get-Plan $csvFile $config $automations).automation) $null
+
+  Write-Host '--- automations read from the website ---'
+  $rest = '{"name":"projects/p/databases/(default)/documents/sites/l12/features/dispatch-automation/automations/a7","fields":{"name":{"stringValue":"Return"},"enabled":{"booleanValue":true},"keywords":{"arrayValue":{"values":[{"stringValue":"Grab & Go"}]}},"fileTypes":{"arrayValue":{}},"printFile":{"booleanValue":false},"fileCopies":{"integerValue":"9"},"documents":{"arrayValue":{"values":[{"mapValue":{"fields":{"file":{"stringValue":"LDO.pdf"},"copies":{"integerValue":"2"}}}}]}},"sticker":{"booleanValue":true},"stickerLines":{"arrayValue":{"values":[{"stringValue":"{ticket}"}]}},"stickerFields":{"arrayValue":{"values":[{"mapValue":{"fields":{"name":{"stringValue":"ticket"},"label":{"stringValue":"Ticket"}}}}]}},"updatedAt":{"timestampValue":"2026-10-01T09:00:00.123456Z"}}}' | ConvertFrom-Json
+  $fromWeb = ConvertTo-Automation (ConvertFrom-FirestoreFields $rest.fields) 'a7'
+  Eq 'a website automation: name and words' @($fromWeb.name, $fromWeb.keywords) @('Return', @('Grab & Go'))
+  Eq 'a website automation: an empty list stays empty' $fromWeb.fileTypes.Count 0
+  Eq 'a website automation: copies kept within 1-5' $fromWeb.fileCopies 5
+  Eq 'a website automation: files to print' @($fromWeb.documents[0].file, $fromWeb.documents[0].copies) @('LDO.pdf', 2)
+  Eq 'a website automation: sticker details' @($fromWeb.stickerFields[0].name, $fromWeb.stickerFields[0].label) @('ticket', 'Ticket')
+  Eq 'a website automation: it works with the matching rules' (Find-Automation 'GRAB & GO return' 'a.pdf' @($fromWeb)).id 'a7'
+  Eq 'a missing field gets its default' (ConvertTo-Automation ([pscustomobject]@{ name = 'Bare' }) 'b').enabled $true
+  $me = ConvertFrom-FirestoreFields (('{"siteId":{"stringValue":"l12"},"tempSiteId":{"stringValue":"l9"},"tempEndsAt":{"timestampValue":"2026-10-05T00:00:00Z"}}') | ConvertFrom-Json)
+  Eq 'the current site: away on a temporary move' (Get-CurrentSite $me ([datetime]'2026-10-01T10:00:00Z')) 'l9'
+  Eq 'the current site: home again once it ends' (Get-CurrentSite $me ([datetime]'2026-10-06T10:00:00Z')) 'l12'
+
+  Write-Host '--- signing in (the same as the website) ---'
+  Eq 'the credentials match the website' (Get-WorkIdCredentials '4471') @{ email = '4471@nblab.local'; password = '7151242b4b3ae3938e73ec7cc7e658c5' }
+  Eq '...trimmed and in any case' (Get-WorkIdCredentials ' ab12.x ').password '54b292074947116eb84c3d2b61ddafee'
+  Eq 'a work ID is needed' (Test-WorkId '  ') 'Enter your work ID.'
+  Eq 'too short' (Test-WorkId '12') 'The work ID must be at least 3 characters.'
+  Eq 'odd characters' (Test-WorkId 'a b') 'Use only letters, numbers, dots, dashes or underscores.'
+  Eq 'a good work ID' (Test-WorkId 'ab12.x') $null
+  Eq 'a wrong work ID, in words' (Get-FirebaseErrorMessage '{"error":{"message":"INVALID_LOGIN_CREDENTIALS"}}') 'That work ID was not recognised.'
+  Eq 'an expired sign-in, in words' (Get-FirebaseErrorMessage '{"error":{"message":"TOKEN_EXPIRED"}}') 'The sign-in on this PC has expired. Open the settings and enter the work ID again.'
+  Eq 'no answer at all' (Get-FirebaseErrorMessage '') 'No connection to the server.'
+  Eq 'the sign-in is kept encrypted, for this user only' (Unprotect-Text (Protect-Text 'refresh-123')) 'refresh-123'
+  Eq '...and is not readable as stored' ((Protect-Text 'refresh-123') -match 'refresh') $false
+
+  # The real sign-in service, with a work ID that does not exist: proves the
+  # address, TLS and the error message - using the key from .env.local.
+  $envFile = Join-Path $PSScriptRoot '..\.env.local'
+  $keyLine = if (Test-Path $envFile) { Get-Content $envFile | Where-Object { $_ -match '^VITE_FIREBASE_API_KEY=' } | Select-Object -First 1 } else { $null }
+  if ($keyLine) {
+    $FirebaseApiKey = ($keyLine -split '=', 2)[1].Trim().Trim('"')
+    $answer = try { Invoke-FirebaseSignIn 'ZZTEST000NOTREAL' | Out-Null; 'signed in?!' } catch { $_.Exception.Message }
+    Eq 'the real sign-in service refuses an unknown work ID, in words' $answer 'That work ID was not recognised.'
+  } else {
+    Write-Host '  (skipped the live sign-in check: no .env.local)'
+  }
+
+  Write-Host '--- the setup window ---'
+  $form = New-SetupForm @{ watchFolder = 'C:\In'; filesFolder = 'C:\Print'; stickerPrinter = 'Not a printer'; startAtSignIn = $false; email = '4471@nblab.local'; refreshToken = 'x'; dryRun = $false }
+  Eq 'it shows the saved folders' @($form.controls.watchFolder.Text, $form.controls.filesFolder.Text) @('C:\In', 'C:\Print')
+  Eq 'an unknown sticker printer falls back to none' $form.controls.stickerPrinter.SelectedIndex 0
+  Eq 'it says who is signed in' ($form.controls.signedIn.Text -match '^Signed in as 4471') $true
+  Eq 'the work ID box hides what is typed' $form.controls.workId.UseSystemPasswordChar $true
+  $form.form.Dispose()
 } finally {
   Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
 }
