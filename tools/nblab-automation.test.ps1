@@ -191,6 +191,17 @@ try {
     Write-Host '  (skipped the live sign-in check: no .env.local)'
   }
 
+  Write-Host '--- starting with Windows ---'
+  $StableCopy = Join-Path $work 'nblab-automation.cmd'
+  [System.IO.File]::WriteAllText($StableCopy, '@echo off')
+  $link = Join-Path $work 'NBLAB automation.lnk'
+  Set-StartAtSignIn $true $link
+  $saved = (New-Object -ComObject WScript.Shell).CreateShortcut($link)
+  Eq 'the shortcut starts a console with no window' ($saved.TargetPath -like '*\System32\conhost.exe') $true
+  Eq '...running the copy kept with the settings' $saved.Arguments "--headless cmd.exe /c `"$StableCopy`""
+  Set-StartAtSignIn $false $link
+  Eq 'turning it off removes the shortcut' (Test-Path -LiteralPath $link) $false
+
   Write-Host '--- the setup window ---'
   $form = New-SetupForm @{ watchFolder = 'C:\In'; filesFolder = 'C:\Print'; stickerPrinter = 'Not a printer'; startAtSignIn = $false; email = '4471@nblab.local'; refreshToken = 'x'; dryRun = $false }
   Eq 'it shows the saved folders' @($form.controls.watchFolder.Text, $form.controls.filesFolder.Text) @('C:\In', 'C:\Print')

@@ -17,6 +17,12 @@ export const agentCmd = (env) => {
     .replace('__NBLAB_FIREBASE_API_KEY__', env.VITE_FIREBASE_API_KEY || '')
     .replace('__NBLAB_FIREBASE_PROJECT_ID__', env.VITE_FIREBASE_PROJECT_ID || '')
   const run = "& ([scriptblock]::Create([IO.File]::ReadAllText($env:NBLAB_SELF))) -Self $env:NBLAB_SELF -Test $env:NBLAB_TEST -Setup:($env:NBLAB_SETUP -eq '1')"
+  // The agent itself is started with no console at all (CreateNoWindow):
+  // "-WindowStyle Hidden" is ignored when Windows Terminal hosts consoles
+  // (the Windows 11 default), which left a window open the whole time.
+  const detach = "$s = New-Object Diagnostics.ProcessStartInfo 'powershell.exe'; " +
+    "$s.Arguments = '-NoProfile -ExecutionPolicy Bypass -Command ' + [char]34 + $env:NBLAB_RUN + [char]34; " +
+    '$s.CreateNoWindow = $true; $s.UseShellExecute = $false; [void][Diagnostics.Process]::Start($s)'
   const starter = [
     '<# :',
     '@echo off',
@@ -32,7 +38,7 @@ export const agentCmd = (env) => {
     'if defined NBLAB_TEST (',
     '  powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "%NBLAB_RUN%"',
     ') else (',
-    '  start "" powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "%NBLAB_RUN%"',
+    `  powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "${detach}"`,
     ')',
     'exit /b',
     '#>',

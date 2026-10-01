@@ -109,7 +109,7 @@ rules-tests/
 
 ```bash
 npm test             # 450 assertions on the pure logic, no browser or network
-npm run test:agent   # 64 cases for the lab-PC automation agent (Windows PowerShell)
+npm run test:agent   # 67 cases for the lab-PC automation agent (Windows PowerShell)
 npm run test:rules   # 216 security-rule cases in the local Firestore emulator (needs Java)
 ```
 
@@ -267,7 +267,7 @@ When a worker returns a user's PC through **Grab & Go**, the file the return pro
 
 **How it gets the automations:** it signs in once with the work ID, exactly as the website does (same derived credentials, tested against the website's code), and reads the automations of the person's current site from Firestore — the rules let any worker there read them. The work ID is never stored; the sign-in is kept encrypted with Windows DPAPI, readable only by that Windows user. If the website cannot be reached, it uses the last copy it read. Nothing from the files leaves the PC.
 
-**Built for downloading:** `vite.config.js` publishes the script as `nblab-automation.cmd` — a few batch lines that run the rest of the same file in PowerShell — with the website's public Firebase settings filled in. Settings, sign-in, the saved copy and the log live in `%LOCALAPPDATA%\NBLAB\automation`; "start with Windows" is a Startup-folder shortcut to a copy kept there. `nblab-automation.cmd -Test "file.pdf"` shows what it reads from a file and what it would print; `-Setup` reopens the window.
+**Built for downloading:** `vite.config.js` publishes the script as `nblab-automation.cmd` — a few batch lines that run the rest of the same file in PowerShell — with the website's public Firebase settings filled in. The agent is started with no console at all (`CreateNoWindow`), and the sign-in shortcut goes through `conhost --headless` — "hidden" windows are ignored when Windows Terminal hosts consoles, the Windows 11 default, which otherwise leaves a window open. One agent runs per Windows user; starting a newer download offers to replace the running one and refreshes the sign-in shortcut. Settings, sign-in, the saved copy and the log live in `%LOCALAPPDATA%\NBLAB\automation`; "start with Windows" is a Startup-folder shortcut to a copy kept there. `nblab-automation.cmd -Test "file.pdf"` shows what it reads from a file and what it would print; `-Setup` reopens the window.
 
 The matching and detail rules exist twice — `src/services/automation.js` (the page) and the agent — and their tests mirror each other case for case (`npm test`, `npm run test:agent`).
 

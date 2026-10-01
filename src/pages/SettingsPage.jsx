@@ -220,8 +220,9 @@ export const SettingsPage = ({
               <li>Put the files to print (like <code>LDO.pdf</code>) in that folder, named as in the automations.</li>
             </ol>
             <span className="tool-note">
-              It then runs next to the clock and starts with Windows; changes on the Automation page reach it by themselves.
-              Right-click its icon for the settings or the log. Try a file without printing:
+              It then runs out of sight next to the clock and starts with Windows; changes on the Automation page reach it by
+              themselves. Right-click its icon for the settings or the log. To update it, download again, double-click, and
+              choose <em>Yes</em> to replace the running copy. Try a file without printing:
               <code>nblab-automation.cmd -Test "C:\path\to\file.pdf"</code>. PDFs print through the PC&apos;s PDF app (it needs a
               Print command, like Adobe Reader). If company policy blocks scripts, IT has to allow it.
             </span>

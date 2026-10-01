@@ -47,7 +47,7 @@ $ErrorActionPreference = 'Stop'
 # Google's servers need TLS 1.2, which Windows PowerShell 5.1 does not use by default.
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
-$AgentVersion = '2.0.0'
+$AgentVersion = '2.1.0'
 # Filled in when the website is built (vite.config.js) with the same public
 # Firebase settings the website uses.
 $FirebaseApiKey = '__NBLAB_FIREBASE_API_KEY__'
@@ -577,10 +577,10 @@ function Show-Notice([string]$Title, [string]$Text, [string]$Kind = 'Info') {
   $script:Tray.ShowBalloonTip(6000, $Title, $Text, [System.Windows.Forms.ToolTipIcon]::$Kind)
 }
 
-function Set-StartAtSignIn([bool]$On) {
+function Set-StartAtSignIn([bool]$On, [string]$Link = '') {
   # A shortcut in the Startup folder to a copy of the .cmd kept with the
   # settings, so moving or deleting the download does not break it.
-  $link = Join-Path ([Environment]::GetFolderPath('Startup')) 'NBLAB automation.lnk'
+  $link = if ($Link) { $Link } else { Join-Path ([Environment]::GetFolderPath('Startup')) 'NBLAB automation.lnk' }
   if (-not $On) {
     if (Test-Path -LiteralPath $link) { Remove-Item -LiteralPath $link -Force }
     return
@@ -591,7 +591,15 @@ function Set-StartAtSignIn([bool]$On) {
   if (-not (Test-Path -LiteralPath $StableCopy)) { return }
   $shell = New-Object -ComObject WScript.Shell
   $shortcut = $shell.CreateShortcut($link)
-  $shortcut.TargetPath = $StableCopy
+  # Through a console with no window (conhost --headless), so nothing opens
+  # at sign-in - Windows Terminal would otherwise show the .cmd's window.
+  $conhost = Join-Path $env:SystemRoot 'System32\conhost.exe'
+  if (Test-Path -LiteralPath $conhost) {
+    $shortcut.TargetPath = $conhost
+    $shortcut.Arguments = "--headless cmd.exe /c `"$StableCopy`""
+  } else {
+    $shortcut.TargetPath = $StableCopy
+  }
   $shortcut.WorkingDirectory = $DataFolder
   $shortcut.WindowStyle = 7
   $shortcut.Description = 'NBLAB dispatch automation'
@@ -910,12 +918,19 @@ if ($Test) {
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# One agent per Windows user: a second double-click opens the settings instead.
+# One agent per Windows user. Starting another - typically a newer download -
+# offers to replace the one that is running.
 $created = $false
 $mutex = New-Object System.Threading.Mutex($true, 'NBLAB-dispatch-automation', [ref]$created)
 if (-not $created) {
-  [void][System.Windows.Forms.MessageBox]::Show('NBLAB automation is already running. Right-click its icon next to the clock for the settings.', 'NBLAB automation')
-  exit 0
+  $answer = [System.Windows.Forms.MessageBox]::Show(
+    "NBLAB automation is already running.`n`nStop it and start this copy instead? Choose Yes after downloading a new version.",
+    'NBLAB automation', 'YesNo', 'Question')
+  if ($answer -ne 'Yes') { exit 0 }
+  Get-CimInstance Win32_Process -Filter "Name='powershell.exe'" |
+    Where-Object { $_.ProcessId -ne $PID -and $_.CommandLine -like '*NBLAB_SELF*' } |
+    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+  try { [void]$mutex.WaitOne(10000) } catch [System.Threading.AbandonedMutexException] { }
 }
 
 if (-not $config -or $Setup -or -not $config.refreshToken) {
@@ -923,6 +938,12 @@ if (-not $config -or $Setup -or -not $config.refreshToken) {
   if (-not $config) { exit 0 }
 }
 if ($DryRun) { $config.dryRun = $true }
+
+# Keep "start with Windows" pointing at this copy, so a newer download takes
+# over the next sign-in too, without opening the settings.
+if ($config.startAtSignIn) {
+  try { Set-StartAtSignIn $true } catch { Write-AgentLog "Could not set start at sign-in: $($_.Exception.Message)" }
+}
 
 try { $loaded = Get-Automations $config }
 catch {
