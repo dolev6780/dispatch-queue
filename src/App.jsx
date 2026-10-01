@@ -26,9 +26,8 @@ import { useAuth } from './hooks/useAuth'
 import { useDispatchQueue } from './hooks/useDispatchQueue'
 import { useJobs } from './hooks/useJobs'
 import { useProcesses } from './hooks/useProcesses'
-import { useGrabAndGo } from './hooks/useGrabAndGo'
 import { useLocalAgent } from './hooks/useLocalAgent'
-import { allTypes } from './services/automation'
+import { GRAB_AND_GO, GRAB_AND_GO_REVISION } from './services/automation'
 import { useServiceNowBridge } from './hooks/useServiceNowBridge'
 import { useServiceNowRelay } from './hooks/useServiceNowRelay'
 import { useRelayInfo } from './hooks/useRelayInfo'
@@ -317,13 +316,12 @@ function App() {
   // A job of a type with a process carries its steps; the checklist dialog
   // follows the live job, so ticks from another station show up here too.
   const workProcesses = useProcesses({ siteId: activeSiteId, canRead: canUse })
-  const grabAndGo = useGrabAndGo({ siteId: activeSiteId, canRead: canUse })
   // The automation agent on this PC: checked on the Automation page, and kept
   // up to date from any page where it has answered before.
   const localAgent = useLocalAgent({
     active: route === 'automation' && canUse,
-    automation: canUse ? grabAndGo.automation : null,
-    revision: grabAndGo.revision,
+    automation: canUse ? GRAB_AND_GO : null,
+    revision: GRAB_AND_GO_REVISION,
     siteId: activeSiteId,
     siteName: site?.name || ''
   })
@@ -550,11 +548,7 @@ function App() {
       <AutomationPage
         key={activeSiteId}
         site={site}
-        automation={grabAndGo.automation}
-        loaded={grabAndGo.loaded}
-        error={grabAndGo.error}
-        canEdit={isSiteAdminHere}
-        uid={auth.user.uid}
+        automation={GRAB_AND_GO}
         agent={localAgent}
       />
     )
@@ -627,7 +621,7 @@ function App() {
         summaries={{
           [DISPATCH_QUEUE]: !todayDay.isWorkDay ? 'Day off today' : todayCount > 0 ? `${todayCount} in queue today` : 'Queue empty today',
           [WORK_PROCESSES]: `${workProcesses.processes.length} ${workProcesses.processes.length === 1 ? 'process' : 'processes'}`,
-          [DISPATCH_AUTOMATION]: grabAndGo.automation ? `Grab & Go · ${allTypes(grabAndGo.automation).length} return types` : 'Not set up'
+          [DISPATCH_AUTOMATION]: 'Grab & Go returns'
         }}
         tempUntil={!global && isTempMoveActive(profile, currentTime) ? formatShortDate(lastDayOf(profile.tempEndsAt)) : null}
         onNavigate={navigate}

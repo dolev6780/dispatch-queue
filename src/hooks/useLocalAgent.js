@@ -61,11 +61,18 @@ export const useLocalAgent = ({ active, automation, revision, siteId, siteName }
     setState({ status: 'ready', info, error: '' })
   }, [])
 
+  // After a file is read or printed, the agent's list of recent files changed.
+  const read = useCallback(async (file) => {
+    const plan = await agentRead(file)
+    refresh()
+    return plan
+  }, [refresh])
+
   const print = useCallback(async (request) => {
     const result = await agentPrint(request)
     refresh()
     return result
   }, [refresh])
 
-  return { ...state, refresh, setPrinters, read: agentRead, plan: agentPlan, print }
+  return { ...state, refresh, setPrinters, read, plan: agentPlan, print }
 }

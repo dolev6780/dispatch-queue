@@ -1,6 +1,6 @@
 import {
-  LIMITS, OTHER_TYPE, defaultAutomation, splitList, cleanAutomation, cleanPrints, validateAutomation, placeholdersIn,
-  unknownPlaceholders, printsSummary, allTypes, allDocuments, isUseful, fromLegacy, agentPayload, noPrints
+  LIMITS, OTHER_TYPE, GRAB_AND_GO, GRAB_AND_GO_REVISION, cleanAutomation, cleanPrints, validateAutomation, placeholdersIn,
+  unknownPlaceholders, printsSummary, allTypes, allDocuments, revisionOf, agentPayload
 } from './automation.js'
 
 let pass = 0
@@ -12,16 +12,20 @@ const eq = (label, got, want) => {
   if (!ok) console.log(`       got  ${JSON.stringify(got)}\n       want ${JSON.stringify(want)}`)
 }
 
-const start = defaultAutomation()
-
-console.log('--- where a site starts ---')
-eq('Grab & Go files, by their words', start.keywords, ['Grab & Go'])
-eq('PC refresh and LDO, then anything else', allTypes(start).map(type => type.name), ['PC refresh', 'LDO', OTHER_TYPE])
-eq('LDO prints its form', start.types[1].documents, [{ file: 'LDO.pdf', copies: 1 }])
-eq('it is valid as it is', validateAutomation(start), null)
-eq('it prints something', isUseful(start), true)
-eq('the folders use each person\'s own', [start.watchFolder, start.filesFolder], ['%USERPROFILE%\\Downloads', '%USERPROFILE%\\Documents\\NBLAB print files'])
-eq('automatic printing is on', start.autoPrint, true)
+console.log('--- the built-in automation ---')
+eq('Grab & Go files, by their words', GRAB_AND_GO.keywords, ['Grab & Go'])
+eq('PC refresh and LDO, then anything else', allTypes(GRAB_AND_GO).map(type => type.name), ['PC refresh', 'LDO', OTHER_TYPE])
+eq('PC refresh prints the receipt and the sticker', printsSummary(GRAB_AND_GO.types[0]), ['receipt', 'sticker'])
+eq('LDO adds its form', printsSummary(GRAB_AND_GO.types[1]), ['receipt', 'LDO.pdf', 'sticker'])
+eq('anything else: the receipt and the sticker', printsSummary(GRAB_AND_GO.other), ['receipt', 'sticker'])
+eq('it is sound: every sticker detail is read, the folders are Windows folders', validateAutomation(GRAB_AND_GO), null)
+eq('it is already clean', cleanAutomation(GRAB_AND_GO), GRAB_AND_GO)
+eq('the folders use each person\'s own', [GRAB_AND_GO.watchFolder, GRAB_AND_GO.filesFolder], ['%USERPROFILE%\\Downloads', '%USERPROFILE%\\Documents\\NBLAB print files'])
+eq('it prints by itself', GRAB_AND_GO.autoPrint, true)
+eq('its forms', allDocuments(GRAB_AND_GO), ['LDO.pdf'])
+eq('its revision: a positive whole number', Number.isInteger(GRAB_AND_GO_REVISION) && GRAB_AND_GO_REVISION > 0, true)
+eq('...that changes when it does', revisionOf({ ...GRAB_AND_GO, stickerLines: ['{ticket}'] }) !== GRAB_AND_GO_REVISION, true)
+eq('...and not otherwise', revisionOf(JSON.parse(JSON.stringify(GRAB_AND_GO))), GRAB_AND_GO_REVISION)
 
 console.log('--- cleaning ---')
 const messy = cleanAutomation({
@@ -45,45 +49,25 @@ eq('empty sticker lines dropped', messy.stickerLines, ['{type}', '{asset}'])
 eq('folders trimmed', [messy.watchFolder, messy.filesFolder], ['C:\\In', 'D:\\Forms'])
 eq('automatic printing on unless turned off', [messy.autoPrint, cleanAutomation({ autoPrint: false }).autoPrint], [true, false])
 eq('no more than the limit of types', cleanAutomation({ types: Array.from({ length: 12 }, (_, i) => ({ name: `T${i}`, keywords: ['w'] })) }).types.length, LIMITS.types)
-eq('nothing at all prints nothing', cleanPrints(undefined), noPrints())
-eq('splitting a list', splitList('a, b\nc,,'), ['a', 'b', 'c'])
+eq('nothing at all prints nothing', cleanPrints(undefined), { receipt: false, receiptCopies: 1, documents: [], sticker: false })
 
-console.log('--- checking before saving ---')
-const withTypes = (types, extra) => ({ ...start, types, ...extra })
-eq('needs the Grab & Go words', validateAutomation({ ...start, keywords: [] }), 'Add at least one word every Grab & Go file has.')
+console.log('--- what makes an automation sound ---')
+const withTypes = (types) => ({ ...GRAB_AND_GO, types })
+eq('needs the Grab & Go words', validateAutomation({ ...GRAB_AND_GO, keywords: [] }), 'Add at least one word every Grab & Go file has.')
 eq('every type needs a name', validateAutomation(withTypes([{ name: ' ', keywords: ['x'] }])), 'Give every return type a name.')
 eq('every type needs its words', validateAutomation(withTypes([{ name: 'LDO', keywords: [] }])), 'Add the words that show a file is "LDO".')
 eq('no two types with one name', validateAutomation(withTypes([{ name: 'LDO', keywords: ['a'] }, { name: 'ldo', keywords: ['b'] }])), 'There are two types named "ldo".')
 eq('"anything else" is not added twice', validateAutomation(withTypes([{ name: 'Anything else', keywords: ['a'] }])), '"Anything else" is already there, at the end.')
-eq('a sticker needs lines', validateAutomation({ ...start, stickerLines: [] }), 'Write at least one line for the sticker.')
-eq('no sticker anywhere: no lines needed', validateAutomation({ ...start, stickerLines: [], types: [], other: { receipt: true } }), null)
-eq('every {placeholder} must be read', validateAutomation({ ...start, stickerLines: ['{serial}'] }), 'The sticker uses {serial}, but no detail is read with that name.')
+eq('a sticker needs lines', validateAutomation({ ...GRAB_AND_GO, stickerLines: [] }), 'Write at least one line for the sticker.')
+eq('every {placeholder} must be read', validateAutomation({ ...GRAB_AND_GO, stickerLines: ['{serial}'] }), 'The sticker uses {serial}, but no detail is read with that name.')
 eq('the built-in details are always there', unknownPlaceholders({ stickerFields: [], stickerLines: ['{type} {file} {date} {time}'] }), [])
 eq('placeholders, once each, any case', placeholdersIn(['{A} {a}', '{b}']), ['a', 'b'])
-eq('a folder must look like a Windows folder', validateAutomation({ ...start, watchFolder: 'Downloads' }).startsWith('The folder to listen to should look like'), true)
-eq('a network share works', validateAutomation({ ...start, filesFolder: '\\\\lab-server\\print' }), null)
-eq('only types with nothing to print: not useful', isUseful({ ...start, types: [], other: noPrints() }), false)
-
-console.log('--- in words ---')
-eq('what a type prints', printsSummary(cleanPrints({ receipt: true, receiptCopies: 2, documents: [{ file: 'LDO.pdf', copies: 1 }], sticker: true })), ['receipt ×2', 'LDO.pdf', 'sticker'])
-eq('every form, once', allDocuments({ ...start, other: { ...start.other, documents: [{ file: 'LDO.pdf', copies: 2 }, { file: 'Receipt.pdf', copies: 1 }] } }), ['LDO.pdf', 'Receipt.pdf'])
-
-console.log('--- from the automations made before ---')
-const legacy = fromLegacy([
-  { name: 'Refresh', keywords: ['Grab & Go', 'refresh'], printFile: true, fileCopies: 2, documents: [], sticker: true, stickerLines: ['{ticket}'], stickerFields: [{ name: 'ticket', label: 'Ticket' }] },
-  { name: 'LDO return', keywords: ['Grab & Go', 'LDO'], printFile: false, fileCopies: 1, documents: [{ file: 'LDO.pdf', copies: 1 }], sticker: false }
-], { watchFolder: 'D:\\GG', filesFolder: '', dryRun: true })
-eq('the words they share say it is a Grab & Go file', legacy.keywords, ['Grab & Go'])
-eq('each becomes a type, with its own words', legacy.types.map(type => [type.name, type.keywords]), [['Refresh', ['refresh']], ['LDO return', ['LDO']]])
-eq('...printing what it printed', [legacy.types[0].receipt, legacy.types[0].receiptCopies, legacy.types[1].documents], [true, 2, [{ file: 'LDO.pdf', copies: 1 }]])
-eq('the sticker carries over', [legacy.stickerLines, legacy.stickerFields], [['{ticket}'], [{ name: 'ticket', label: 'Ticket' }]])
-eq('the folders carry over; test mode means no automatic printing', [legacy.watchFolder, legacy.filesFolder, legacy.autoPrint], ['D:\\GG', start.filesFolder, false])
-eq('nothing before: the usual start', fromLegacy([], null), start)
+eq('a folder must look like a Windows folder', validateAutomation({ ...GRAB_AND_GO, watchFolder: 'Downloads' }).startsWith('The folder to listen to should look like'), true)
 
 console.log('--- for the agent on this PC ---')
-const payload = agentPayload({ ...start, keywords: [' Grab & Go '] }, { revision: 1717171717000, site: { id: 'l12', name: 'L12', extra: 'x' } })
+const payload = agentPayload({ ...GRAB_AND_GO, keywords: [' Grab & Go '] }, { revision: GRAB_AND_GO_REVISION, site: { id: 'l12', name: 'L12', extra: 'x' } })
 eq('the automation, cleaned', payload.automation.keywords, ['Grab & Go'])
-eq('...with its revision and site', [payload.revision, payload.site], [1717171717000, { id: 'l12', name: 'L12' }])
+eq('...with its revision and site', [payload.revision, payload.site], [GRAB_AND_GO_REVISION, { id: 'l12', name: 'L12' }])
 
 console.log(`\n${pass} passed, ${fail} failed`)
 process.exit(fail ? 1 : 0)

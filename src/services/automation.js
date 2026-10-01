@@ -1,16 +1,18 @@
 /**
  * Dispatch automation — pure definitions and logic (no React, no Firebase).
  *
- * A site has ONE automation, for Grab & Go returns. A file is a Grab & Go
- * file when its CONTENT holds all the automation's words; then its return
- * type is the first type whose words are all in it — PC refresh, LDO, … — or
+ * There is ONE automation, built in, for Grab & Go returns. A file is a Grab &
+ * Go file when its CONTENT holds all the automation's words; then its return
+ * type is the first type whose words are all in it — PC refresh, LDO — or
  * "anything else". Each type says what to print: the receipt (the downloaded
  * file itself), forms from the PC's files-to-print folder, and a sticker whose
  * lines are filled with details read from the file.
  *
- * The website saves it and hands it to the agent on each lab PC
+ * The website hands it to the agent on each lab PC
  * (tools/nblab-automation.ps1), which listens to the folder and prints; the
- * matching and reading rules live there, with their tests.
+ * matching and reading rules live there, with their tests. To change what is
+ * printed, change GRAB_AND_GO below: its revision changes with it, so every
+ * agent takes the new one the next time the website is open on its PC.
  */
 
 export const LIMITS = {
@@ -35,38 +37,13 @@ export const OTHER_TYPE = 'Anything else'
 /** Always available on a sticker, whatever the file holds. */
 export const BUILTIN_FIELDS = ['type', 'file', 'date', 'time']
 
-/** What a type prints: the receipt (the downloaded file), forms, a sticker. */
-export const noPrints = () => ({ receipt: false, receiptCopies: 1, documents: [], sticker: false })
-
-/** Where a new site starts: the three kinds of return, printing what they usually need. */
-export const defaultAutomation = () => ({
-  keywords: ['Grab & Go'],
-  fileTypes: [],
-  types: [
-    { name: 'PC refresh', keywords: ['refresh'], receipt: true, receiptCopies: 1, documents: [], sticker: true },
-    { name: 'LDO', keywords: ['LDO'], receipt: true, receiptCopies: 1, documents: [{ file: 'LDO.pdf', copies: 1 }], sticker: true }
-  ],
-  other: { receipt: true, receiptCopies: 1, documents: [], sticker: true },
-  stickerFields: [
-    { name: 'ticket', label: 'Ticket' },
-    { name: 'asset', label: 'Asset tag' },
-    { name: 'user', label: 'User' }
-  ],
-  stickerLines: ['{type}', '{ticket}', 'Asset {asset}', '{user} - {date}'],
-  watchFolder: '%USERPROFILE%\\Downloads',
-  filesFolder: '%USERPROFILE%\\Documents\\NBLAB print files',
-  autoPrint: true
-})
-
-/** "a, b\nc" -> ['a', 'b', 'c'] */
-export const splitList = (text) => String(text || '').split(/[,\n]/).map(item => item.trim()).filter(Boolean)
-
 const clampCopies = (value) => Math.min(LIMITS.copies, Math.max(1, Math.round(Number(value) || 1)))
 const fieldName = (value) => String(value || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 30)
 const unique = (list) => [...new Set(list)]
 const cleanWords = (list) =>
   unique((list || []).map(word => String(word).trim().slice(0, LIMITS.keyword)).filter(Boolean)).slice(0, LIMITS.keywords)
 
+/** What a type prints: the receipt (the downloaded file), forms, a sticker. */
 export const cleanPrints = (prints) => ({
   receipt: !!prints?.receipt,
   receiptCopies: clampCopies(prints?.receiptCopies),
@@ -77,7 +54,7 @@ export const cleanPrints = (prints) => ({
   sticker: !!prints?.sticker
 })
 
-/** A draft from the editor, trimmed and cut to the limits — what gets saved. */
+/** The automation trimmed and cut to the limits — what the agents get. */
 export const cleanAutomation = (draft) => ({
   keywords: cleanWords(draft?.keywords),
   fileTypes: unique((draft?.fileTypes || []).map(type => String(type).trim().replace(/^\*?\./, '').toLowerCase()).filter(Boolean)).slice(0, LIMITS.fileTypes),
@@ -106,9 +83,8 @@ export const unknownPlaceholders = (automation) => {
 }
 
 const looksLikeWindowsFolder = (path) => /^([a-zA-Z]:\\|\\\\[^\\]+\\|%[A-Za-z_]+%)/.test(path)
-const printsSomething = (prints) => prints.receipt || prints.documents.length > 0 || prints.sticker
 
-/** Check the automation before saving; returns an error message or null. */
+/** Is an automation sound? Returns what is wrong, or null. (Guards GRAB_AND_GO in the tests.) */
 export const validateAutomation = (draft) => {
   const a = cleanAutomation(draft)
   if (a.keywords.length === 0) return 'Add at least one word every Grab & Go file has.'
@@ -146,38 +122,38 @@ export const allTypes = (automation) => [
 export const allDocuments = (automation) =>
   unique(allTypes(automation).flatMap(type => type.documents.map(doc => doc.file)))
 
-export const isUseful = (automation) => allTypes(automation).some(type => printsSomething(type))
+/** A number that changes whenever the automation does. */
+export const revisionOf = (automation) => {
+  let hash = 0
+  for (const ch of JSON.stringify(cleanAutomation(automation))) hash = (Math.imul(hash, 31) + ch.charCodeAt(0)) | 0
+  return Math.abs(hash) || 1
+}
 
 /**
- * A starting point from the automations a site made before there was one:
- * each becomes a return type; the words they share say it is a Grab & Go file.
+ * The automation: Grab & Go files, and what each kind of return prints. The
+ * words and details are what the Grab & Go files are expected to hold —
+ * check them against a real file.
  */
-export const fromLegacy = (automations, agentSettings) => {
-  const list = (automations || []).filter(item => item && item.keywords?.length)
-  const base = defaultAutomation()
-  if (!list.length && !agentSettings) return base
-  const shared = list.length ? list[0].keywords.filter(word => list.every(item => item.keywords.includes(word))) : []
-  const withSticker = list.find(item => item.sticker && item.stickerLines?.length)
-  return {
-    ...base,
-    keywords: shared.length ? shared : base.keywords,
-    types: list.length
-      ? list.map(item => ({
-        name: item.name,
-        keywords: item.keywords.filter(word => !shared.includes(word)).length ? item.keywords.filter(word => !shared.includes(word)) : item.keywords,
-        receipt: !!item.printFile,
-        receiptCopies: item.fileCopies || 1,
-        documents: item.documents || [],
-        sticker: !!item.sticker
-      }))
-      : base.types,
-    stickerFields: withSticker?.stickerFields?.length ? withSticker.stickerFields : base.stickerFields,
-    stickerLines: withSticker ? withSticker.stickerLines : base.stickerLines,
-    watchFolder: agentSettings?.watchFolder || base.watchFolder,
-    filesFolder: agentSettings?.filesFolder || base.filesFolder,
-    autoPrint: agentSettings ? !agentSettings.dryRun : base.autoPrint
-  }
-}
+export const GRAB_AND_GO = cleanAutomation({
+  keywords: ['Grab & Go'],
+  fileTypes: [],
+  types: [
+    { name: 'PC refresh', keywords: ['refresh'], receipt: true, receiptCopies: 1, documents: [], sticker: true },
+    { name: 'LDO', keywords: ['LDO'], receipt: true, receiptCopies: 1, documents: [{ file: 'LDO.pdf', copies: 1 }], sticker: true }
+  ],
+  other: { receipt: true, receiptCopies: 1, documents: [], sticker: true },
+  stickerFields: [
+    { name: 'ticket', label: 'Ticket' },
+    { name: 'asset', label: 'Asset tag' },
+    { name: 'user', label: 'User' }
+  ],
+  stickerLines: ['{type}', '{ticket}', 'Asset {asset}', '{user} - {date}'],
+  watchFolder: '%USERPROFILE%\\Downloads',
+  filesFolder: '%USERPROFILE%\\Documents\\NBLAB print files',
+  autoPrint: true
+})
+
+export const GRAB_AND_GO_REVISION = revisionOf(GRAB_AND_GO)
 
 /** What the website hands to the agent on this PC. */
 export const agentPayload = (automation, { revision, site }) => ({

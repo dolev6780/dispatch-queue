@@ -26,7 +26,6 @@ import { toSlug } from './queueOps'
 import { USERS } from './authService'
 import { DISPATCH_QUEUE, WORK_PROCESSES, DISPATCH_AUTOMATION } from './features'
 import { cleanSteps } from './processes'
-import { cleanAutomation } from './automation'
 
 /**
  * Firestore data layer — everything is scoped to a site.
@@ -499,38 +498,9 @@ export const deleteProcess = (siteId, processId) =>
   deleteDoc(doc(processesCollection(requireDb(), siteId), processId))
 
 // ---------------------------------------------------------------------------
-// Dispatch automation
+// Dispatch automation: built in (services/automation.js), nothing stored. These
+// are what earlier versions stored, so deleting a site still removes them.
 // ---------------------------------------------------------------------------
 
 const automationsCollection = (db, siteId) => collection(db, ...featurePath(siteId, DISPATCH_AUTOMATION), 'automations')
 const settingsRef = (db, siteId, name) => doc(db, ...featurePath(siteId, DISPATCH_AUTOMATION), 'settings', name)
-
-/** The site's one automation (Grab & Go returns), live; null until an admin sets it up. */
-export const watchGrabAndGo = (siteId, onChange, onError) => {
-  const db = getDb()
-  if (!db || !siteId) return () => {}
-  return onSnapshot(
-    settingsRef(db, siteId, 'automation'),
-    (snapshot) => onChange(snapshot.exists() ? snapshot.data({ serverTimestamps: 'estimate' }) : null),
-    onError
-  )
-}
-
-export const saveGrabAndGo = (siteId, values, uid) =>
-  setDoc(settingsRef(requireDb(), siteId, 'automation'), { ...cleanAutomation(values), updatedBy: uid, updatedAt: serverTimestamp() })
-
-/**
- * What the site had before there was one automation — separate automations
- * and the lab-PC folder settings — to start the new one from.
- */
-export const loadLegacyAutomation = async (siteId) => {
-  const db = requireDb()
-  const [list, agent] = await Promise.all([
-    getDocs(automationsCollection(db, siteId)).catch(() => null),
-    getDoc(settingsRef(db, siteId, 'agent')).catch(() => null)
-  ])
-  return {
-    automations: list ? list.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name))) : [],
-    agentSettings: agent?.exists() ? agent.data() : null
-  }
-}

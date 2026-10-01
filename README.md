@@ -104,13 +104,13 @@ tools/
   servicenow-relay.mjs        main-PC server: shares the unassigned list with the other lab PCs, in memory,
                               and answers the AI assistant with the Gemini key it keeps (tested)
 rules-tests/
-  rules.test.mjs           235-case security-rules suite, run in the Firestore emulator
+  rules.test.mjs           222-case security-rules suite, run in the Firestore emulator
 ```
 
 ```bash
-npm test             # 464 assertions on the pure logic, no browser or network
+npm test             # 458 assertions on the pure logic, no browser or network
 npm run test:agent   # 117 cases for the lab-PC automation agent (Windows PowerShell)
-npm run test:rules   # 235 security-rule cases in the local Firestore emulator (needs Java)
+npm run test:rules   # 222 security-rule cases in the local Firestore emulator (needs Java)
 ```
 
 CI runs `lint` and `test` before every deploy. The rules suite runs locally — it needs Java and the Firebase CLI.
@@ -250,21 +250,21 @@ An **Assistant** tab where technicians ask IT and PC questions and get step-by-s
 
 When a worker returns a user's PC through **Grab & Go**, the file the return produces arrives on their lab PC — and that PC prints what that kind of return needs: the **receipt** (the downloaded file itself) and forms like the LDO form on its **A4 printer**, and a sticker with the ticket and asset details on its **sticker printer**.
 
-**One automation per site** (*Automation* tab; site admins edit it, stored at `sites/{site}/features/dispatch-automation/settings/automation`):
+**The automation is built in** — `GRAB_AND_GO` in [`src/services/automation.js`](./src/services/automation.js); nothing to set up on the site:
 
-- **what makes a file a Grab & Go file** — words that must all be in its *content* (any capitals); optionally, only some file types. Every other file in the folder is left alone;
-- **return types**, tried in order — *PC refresh*, *LDO*, … — each with the words that show a file is that type, and what it prints: the receipt (×1–5), forms by name (×1–5 each) from the files-to-print folder, the sticker. **Anything else** catches a Grab & Go file of no listed type;
-- **the sticker** — its lines, with `{placeholders}` filled from **details read from the file** (a detail is what follows its label: `Asset tag: NB-48213` gives `NB-48213`; in CSV or table files, the next cell), plus `{type}`, `{file}`, `{date}`, `{time}`;
-- **the folders** — to listen to, and with the forms (`%USERPROFILE%` is each person's own) — and whether to **print automatically** when a file arrives, or wait to be printed from the page.
+- **a Grab & Go file** is one whose *content* holds all of its words (any capitals) — every other file in the folder is left alone;
+- **its return type** is the first type whose words are all in it — **PC refresh** (`refresh`), **LDO** (`LDO`) — or **Anything else**;
+- **each type prints** the receipt (the downloaded file itself), its forms by name from the files-to-print folder (LDO: `LDO.pdf`), and the sticker — lines with `{placeholders}` filled from **details read from the file** (a detail is what follows its label: `Asset tag: NB-48213` gives `NB-48213`; in CSV or table files, the next cell), plus `{type}`, `{file}`, `{date}`, `{time}`;
+- it listens to `%USERPROFILE%\Downloads`, takes forms from `%USERPROFILE%\Documents\NBLAB print files`, and prints by itself.
 
-A site that had several automations before starts from them: each becomes a return type. Printers are never site settings — the rules refuse them.
+To change any of it, change `GRAB_AND_GO`: its revision (a hash of it) changes too, and each PC's agent takes the new one the next time the website is open there. Printers are never part of it.
 
 **The page on a lab PC** talks to the agent on that same PC (`http://127.0.0.1:47815`, `src/services/localAgent.js`):
 
 - **This PC** — whether the agent answers, what it listens to, which forms are in its folder, and this PC's **A4 printer** and **sticker printer**, chosen from its Windows printers;
 - **Print** — upload a file (or drop it on the card), or pick one the agent handled lately: the page shows its return type (change it if need be), the details read and the sticker, with **Print all**, and **a button for each print** — receipt, sticker, each form. Blank forms have their own buttons.
 
-The page hands the site's automation to the agent whenever it changes — from any page, on PCs where the agent has answered before; Chrome asks once whether the site may look for devices on the PC (choose *Allow*). A page opened through the relay (plain http) cannot reach the agent.
+The page hands the automation to the agent whenever it changes — from any page, on PCs where the agent has answered before; Chrome asks once whether the site may look for devices on the PC (choose *Allow*). A page opened through the relay (plain http) cannot reach the agent.
 
 **The agent** — [`tools/nblab-automation.ps1`](./tools/nblab-automation.ps1), Windows PowerShell, nothing to install — only listens: to the folder, and to the website on the same PC. *Settings → Lab PC tools → Download* gives one file, `nblab-automation.cmd`; double-click it — no window, no sign-in: it runs next to the clock (right-click: the Automation page, the log, the forms, check for updates, stop) and starts with Windows. The first time it opens the Automation page.
 

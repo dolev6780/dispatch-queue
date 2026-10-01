@@ -1,9 +1,7 @@
 import { useState } from 'react'
-import { AlertCircle, Check, Download, FileText, Monitor, Pencil, Printer, RefreshCw, Tag, Upload } from 'lucide-react'
+import { AlertCircle, Check, Download, FileText, Monitor, Printer, RefreshCw, Tag, Upload } from 'lucide-react'
 import { Eyebrow } from '../components/ui'
-import { GrabAndGoDialog } from '../components/GrabAndGoDialog'
-import { loadLegacyAutomation, saveGrabAndGo } from '../services/db'
-import { OTHER_TYPE, allDocuments, allTypes, defaultAutomation, fromLegacy, printsSummary } from '../services/automation'
+import { allDocuments, allTypes, printsSummary } from '../services/automation'
 import { siteLabel } from '../services/format'
 
 const AGENT_DOWNLOAD = `${import.meta.env.BASE_URL}nblab-automation.cmd`
@@ -67,7 +65,7 @@ const ThisPcCard = ({ agent, automation }) => {
 
   const printers = info.printers || []
   const missing = [!info.a4Printer && 'the A4 printer', !info.stickerPrinter && 'the sticker printer'].filter(Boolean)
-  const forms = automation ? allDocuments(automation) : []
+  const forms = allDocuments(automation)
   const found = new Set((info.documents || []).map(name => name.toLowerCase()))
   const printerSelect = (key, label) => (
     <label className="field">
@@ -112,7 +110,7 @@ const ThisPcCard = ({ agent, automation }) => {
           </>
         )}
         <dt>When a file arrives</dt>
-        <dd>{!automation ? 'Nothing yet — the automation is not set up' : automation.autoPrint ? 'Prints by itself' : 'Waits for you to print here'}</dd>
+        <dd>{automation.autoPrint ? 'Prints by itself' : 'Waits for you to print here'}</dd>
       </dl>
     </section>
   )
@@ -125,7 +123,7 @@ const PrintCard = ({ agent, automation }) => {
   const [message, setMessage] = useState(null) // { tone, text }
   const [dragging, setDragging] = useState(false)
   const info = agent.info
-  const ready = !!info && !!automation
+  const ready = !!info
 
   const run = async (key, work) => {
     setBusy(key)
@@ -150,9 +148,9 @@ const PrintCard = ({ agent, automation }) => {
   })
 
   const recent = info?.recent || []
-  const forms = automation ? allDocuments(automation) : []
+  const forms = allDocuments(automation)
   const noPaper = !info?.a4Printer || !info?.stickerPrinter
-  const typeNames = automation ? allTypes(automation).map(type => type.name) : []
+  const typeNames = allTypes(automation).map(type => type.name)
 
   return (
     <section className={`card gg-print ${dragging ? 'is-dragging' : ''}`} aria-labelledby="print-title"
@@ -168,8 +166,6 @@ const PrintCard = ({ agent, automation }) => {
       </div>
       {!info ? (
         <p className="card-empty">Printing needs the agent on this PC (above).</p>
-      ) : !automation ? (
-        <p className="card-empty">The automation is not set up yet (below).</p>
       ) : (
         <div className="gg-print-grid">
           <div className="gg-recent">
@@ -275,101 +271,22 @@ const PrintCard = ({ agent, automation }) => {
   )
 }
 
-/** The site's one automation, as it is; admins edit it. */
-const AutomationCard = ({ automation, loaded, canEdit, onEdit }) => (
-  <section className="card gg-auto" aria-labelledby="auto-title">
-    <div className="card-head">
-      <h3 id="auto-title" className="card-title">The automation</h3>
-      {canEdit && (
-        <button className="btn btn-sm btn-outline" onClick={onEdit}><Pencil size={14} /><span>{automation ? 'Edit' : 'Set up'}</span></button>
-      )}
-    </div>
-    {!automation ? (
-      <p className="card-empty">
-        {!loaded ? 'Loading…' : canEdit ? 'Not set up yet. Set it up: the words that make a file a Grab & Go file, the return types, and what each prints.'
-          : 'Not set up yet — your site admin sets it up.'}
-      </p>
-    ) : (
-      <>
-        <dl className="auto-facts">
-          <dt>A Grab &amp; Go file has</dt>
-          <dd className="auto-words">{automation.keywords.map(word => <span key={word} className="chip is-static">{word}</span>)}</dd>
-          <dt>Files</dt>
-          <dd>{automation.fileTypes.length ? automation.fileTypes.map(type => `.${type}`).join(', ') : 'any file'}</dd>
-        </dl>
-        <ol className="gg-type-list">
-          {allTypes(automation).map(type => (
-            <li key={type.name} className="gg-type-card">
-              <strong>{type.name}</strong>
-              <span className="gg-type-when">
-                {type.name === OTHER_TYPE ? 'none of the above' : <>has {type.keywords.map(word => <span key={word} className="chip is-static">{word}</span>)}</>}
-              </span>
-              <span className="gg-type-prints">{printsSummary(type).join(' · ') || 'prints nothing'}</span>
-            </li>
-          ))}
-        </ol>
-        <div className="gg-auto-foot">
-          {automation.stickerLines.length > 0 && <StickerPreview lines={automation.stickerLines} />}
-          <dl className="auto-facts">
-            <dt>Details read</dt>
-            <dd>{automation.stickerFields.map(field => `${field.label} → {${field.name}}`).join(', ') || '—'}</dd>
-            <dt>Listen to</dt>
-            <dd className="is-mono">{automation.watchFolder}</dd>
-            <dt>Files to print in</dt>
-            <dd className="is-mono">{automation.filesFolder}</dd>
-            <dt>When a file arrives</dt>
-            <dd>{automation.autoPrint ? 'Print automatically' : 'Wait — print from this page'}</dd>
-          </dl>
-        </div>
-      </>
-    )}
-  </section>
-)
-
 /**
- * Dispatch automation: one automation for Grab & Go returns. The agent on
- * each lab PC listens to the folder; this page sets everything up, chooses
- * this PC's printers, and prints on request.
+ * Dispatch automation for Grab & Go returns. The agent on each lab PC listens
+ * to the folder and prints by itself; this page chooses this PC's printers and
+ * prints a file — or any part of it — on request.
  */
-export const AutomationPage = ({ site, automation, loaded, error, canEdit, uid, agent }) => {
-  const [editing, setEditing] = useState(null) // null | { start, isNew }
-  const [actionError, setActionError] = useState('')
+export const AutomationPage = ({ site, automation, agent }) => (
+  <div className="page auto-page">
+    <header className="page-head">
+      <div className="page-head-text">
+        <Eyebrow>Dispatch automation · {siteLabel(site).replace(' · ', ' ')}</Eyebrow>
+        <h1 className="display">Automation</h1>
+        <p className="page-meta">Grab &amp; Go returns · {allTypes(automation).map(type => type.name).join(', ')}</p>
+      </div>
+    </header>
 
-  const edit = async () => {
-    setActionError('')
-    if (automation) { setEditing({ start: automation, isNew: false }); return }
-    try {
-      const legacy = await loadLegacyAutomation(site.id)
-      setEditing({ start: fromLegacy(legacy.automations, legacy.agentSettings), isNew: true })
-    } catch {
-      setEditing({ start: defaultAutomation(), isNew: true })
-    }
-  }
-
-  return (
-    <div className="page auto-page">
-      <header className="page-head">
-        <div className="page-head-text">
-          <Eyebrow>Dispatch automation · {siteLabel(site).replace(' · ', ' ')}</Eyebrow>
-          <h1 className="display">Automation</h1>
-          <p className="page-meta">Grab &amp; Go returns · the agent on each lab PC listens, this page sets up and prints</p>
-        </div>
-      </header>
-
-      {(error || actionError) && <p className="alert" role="alert"><AlertCircle size={16} /><span>{actionError || error}</span></p>}
-
-      <ThisPcCard agent={agent} automation={automation} />
-      <PrintCard agent={agent} automation={automation} />
-      <AutomationCard automation={automation} loaded={loaded} canEdit={canEdit} onEdit={edit} />
-
-      {editing && (
-        <GrabAndGoDialog
-          automation={editing.start}
-          isNew={editing.isNew}
-          onSave={values => saveGrabAndGo(site.id, values, uid)}
-          onClose={() => setEditing(null)}
-        />
-      )}
-    </div>
-  )
-}
+    <ThisPcCard agent={agent} automation={automation} />
+    <PrintCard agent={agent} automation={automation} />
+  </div>
+)

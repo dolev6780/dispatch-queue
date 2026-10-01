@@ -436,36 +436,19 @@ await deny('a member cannot delete one', () => deleteDoc(doc(w1, ...autoOf('haif
 await allow('a site admin deletes one', () => deleteDoc(doc(wa, ...autoOf('haifa'), 'a2')))
 
 // ---------------------------------------------------------------------------
-console.log('\n--- the Grab & Go automation ---')
+console.log('\n--- dispatch automation settings (built in now) ---')
 const ggPath = (site, id = 'automation') => ['sites', site, 'features', 'dispatch-automation', 'settings', id]
-const prints = { receipt: true, receiptCopies: 1, documents: [], sticker: true }
-const grabAndGo = (by, extra) => ({
-  keywords: ['Grab & Go'], fileTypes: [],
-  types: [{ name: 'PC refresh', keywords: ['refresh'], ...prints }, { name: 'LDO', keywords: ['LDO'], ...prints, documents: [{ file: 'LDO.pdf', copies: 1 }] }],
-  other: prints,
-  stickerFields: [{ name: 'ticket', label: 'Ticket' }], stickerLines: ['{type}', '{ticket}'],
-  watchFolder: '%USERPROFILE%\\Downloads', filesFolder: '%USERPROFILE%\\Documents\\NBLAB print files', autoPrint: true,
-  updatedAt: serverTimestamp(), updatedBy: by, ...extra
+const grabAndGo = (by) => ({
+  keywords: ['Grab & Go'], fileTypes: [], types: [], other: { receipt: true, receiptCopies: 1, documents: [], sticker: true },
+  stickerFields: [], stickerLines: ['{type}'], watchFolder: '%USERPROFILE%\\Downloads', filesFolder: '%USERPROFILE%\\Documents\\NBLAB print files',
+  autoPrint: true, updatedAt: serverTimestamp(), updatedBy: by
 })
-await allow('a site admin sets up the automation for their site', () => setDoc(doc(wa, ...ggPath('haifa')), grabAndGo('wa')))
-await allow('a global admin may too', () => setDoc(doc(as('pg'), ...ggPath('haifa')), grabAndGo('pg', { autoPrint: false })))
-await deny('a member cannot', () => setDoc(doc(w1, ...ggPath('haifa')), grabAndGo('w1')))
-await deny("another site's admin cannot", () => setDoc(doc(as('pt'), ...ggPath('haifa')), grabAndGo('pt')))
-await deny('only the one automation document', () => setDoc(doc(wa, ...ggPath('haifa', 'other')), grabAndGo('wa')))
-await deny('the old PC settings are not written any more', () => setDoc(doc(wa, ...ggPath('haifa', 'agent')), { watchFolder: 'C:\\x', filesFolder: 'C:\\y', dryRun: false, updatedAt: serverTimestamp(), updatedBy: 'wa' }))
-await deny('a Grab & Go file needs its words', () => setDoc(doc(wa, ...ggPath('haifa')), grabAndGo('wa', { keywords: [] })))
-await deny('no more than 8 return types', () => setDoc(doc(wa, ...ggPath('haifa')), grabAndGo('wa', { types: Array(9).fill({ name: 'T', keywords: ['t'], ...prints }) })))
-await deny('"anything else" holds only what it prints', () => setDoc(doc(wa, ...ggPath('haifa')), grabAndGo('wa', { other: { ...prints, script: 'x' } })))
-await deny('a folder path over 260 characters', () => setDoc(doc(wa, ...ggPath('haifa')), grabAndGo('wa', { watchFolder: 'C:\\' + 'x'.repeat(260) })))
-await deny('automatic printing must be true or false', () => setDoc(doc(wa, ...ggPath('haifa')), grabAndGo('wa', { autoPrint: 'yes' })))
-await deny('a printer is not a site setting: each PC chooses its own', () => setDoc(doc(wa, ...ggPath('haifa')), grabAndGo('wa', { stickerPrinter: 'ZDesigner ZD421' })))
-await deny('forge who changed it', () => setDoc(doc(wa, ...ggPath('haifa')), grabAndGo('w1')))
-await deny('under another feature', () => setDoc(doc(wa, 'sites', 'haifa', ...FQ, 'settings', 'automation'), grabAndGo('wa')))
-await allow('everyone at the site reads it', () => getDoc(doc(w1, ...ggPath('haifa'))))
-await allow('...and the old PC settings, to carry them over', () => getDoc(doc(w1, ...ggPath('haifa', 'agent'))))
-await deny('a worker at another site does not', () => getDoc(doc(as('wt'), ...ggPath('haifa'))))
-await deny('a stranger does not', () => getDoc(doc(as('stranger'), ...ggPath('haifa'))))
-await allow('a site admin removes it', () => deleteDoc(doc(wa, ...ggPath('haifa'))))
+await deny('nobody stores an automation: it is built into the website', () => setDoc(doc(wa, ...ggPath('haifa')), grabAndGo('wa')))
+await deny('not a global admin either', () => setDoc(doc(as('pg'), ...ggPath('haifa')), grabAndGo('pg')))
+await deny('nor the old PC settings', () => setDoc(doc(wa, ...ggPath('haifa', 'agent')), { watchFolder: 'C:\\x', filesFolder: 'C:\\y', dryRun: false, updatedAt: serverTimestamp(), updatedBy: 'wa' }))
+await deny('what earlier versions stored is not read', () => getDoc(doc(w1, ...ggPath('haifa'))))
+await allow('a site admin removes it, with the site', () => deleteDoc(doc(wa, ...ggPath('haifa'))))
+await deny('a member does not', () => deleteDoc(doc(w1, ...ggPath('haifa', 'agent'))))
 
 // ---------------------------------------------------------------------------
 console.log('\n--- first-time setup on an empty database ---')

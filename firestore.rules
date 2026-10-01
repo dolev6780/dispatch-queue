@@ -187,28 +187,6 @@ service cloud.firestore {
         && d.updatedAt == request.time;
     }
 
-    // The site's one automation, for Grab & Go returns: the words that make a
-    // file a Grab & Go file, its return types and what each prints, the
-    // sticker, the folders, and automatic printing. Rules cannot look inside
-    // list items, so lists are bounded here and every agent cleans them too.
-    // Printers are never here: each PC chooses its own.
-    function validGrabAndGo(d) {
-      return d.keys().hasOnly(['keywords', 'fileTypes', 'types', 'other', 'stickerFields', 'stickerLines',
-                               'watchFolder', 'filesFolder', 'autoPrint', 'updatedAt', 'updatedBy'])
-        && d.keywords is list && d.keywords.size() > 0 && d.keywords.size() <= 10
-        && d.fileTypes is list && d.fileTypes.size() <= 10
-        && d.types is list && d.types.size() <= 8
-        && d.other is map
-        && d.other.keys().hasOnly(['receipt', 'receiptCopies', 'documents', 'sticker'])
-        && d.stickerFields is list && d.stickerFields.size() <= 10
-        && d.stickerLines is list && d.stickerLines.size() <= 8
-        && d.watchFolder is string && d.watchFolder.size() <= 260
-        && d.filesFolder is string && d.filesFolder.size() <= 260
-        && d.autoPrint is bool
-        && d.updatedBy == request.auth.uid
-        && d.updatedAt == request.time;
-    }
-
     // A job either has no process, or carries an exact copy of one of this
     // site's processes — title and steps — with every step still unticked.
     function validJobProcess(d, siteId) {
@@ -409,14 +387,9 @@ service cloud.firestore {
         allow delete: if isHomeAdmin(siteId);
       }
 
-      // 'automation': the site's one automation. 'agent': the lab-PC folder
-      // settings from before it, read once to carry them over.
+      // Superseded: the automation is built into the website now. What earlier
+      // versions stored here is only removed, when the site is deleted.
       match /features/{featureId}/settings/{settingsId} {
-        allow read: if featureId == 'dispatch-automation' && settingsId in ['automation', 'agent']
-          && (belongsTo(siteId) || isHomeAdmin(siteId));
-        allow create, update: if featureId == 'dispatch-automation' && settingsId == 'automation'
-          && isHomeAdmin(siteId)
-          && validGrabAndGo(request.resource.data);
         allow delete: if isHomeAdmin(siteId);
       }
 
