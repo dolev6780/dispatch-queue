@@ -259,14 +259,14 @@ When a worker returns a user's PC through **Grab & Go**, the file the return pro
 
 To change any of it, change `GRAB_AND_GO`: its revision (a hash of it) changes too, and each PC's agent takes the new one the next time the website is open there. Printers are never part of it.
 
-**The page on a lab PC** talks to the agent on that same PC (`http://127.0.0.1:47815`, `src/services/localAgent.js`):
+**The website on a lab PC** talks to the agent on that same PC (`http://127.0.0.1:47815`, `src/services/localAgent.js`):
 
-- **This PC** — whether the agent answers, what it listens to, which forms are in its folder, and this PC's **A4 printer** and **sticker printer**, chosen from its Windows printers;
-- **Print** — upload a file (or drop it on the card), or pick one the agent handled lately: the page shows its return type (change it if need be), the details read and the sticker, with **Print all**, and **a button for each print** — receipt, sticker, each form. Blank forms have their own buttons.
+- **Settings → Printing on this PC** (`ThisPcCard`) — whether the agent answers, what it listens to, which forms are in its folder, and this PC's **A4 printer** and **sticker printer**, chosen from its Windows printers;
+- **Automation → Print** — upload a file (or drop it on the card), or pick one the agent handled lately: the page shows its return type, read from the file, the details read and the sticker, with **Print all**, and **a button for each print** — receipt, sticker, each form. Blank forms have their own buttons. Without the agent or its printers, it points to Settings.
 
 The page hands the automation to the agent whenever it changes — from any page, on PCs where the agent has answered before; Chrome asks once whether the site may look for devices on the PC (choose *Allow*). A page opened through the relay (plain http) cannot reach the agent.
 
-**The agent** — [`tools/nblab-automation.ps1`](./tools/nblab-automation.ps1), Windows PowerShell, nothing to install — only listens: to the folder, and to the website on the same PC. *Settings → Lab PC tools → Download* gives one file, `nblab-automation.cmd`; double-click it — no window, no sign-in: it runs next to the clock (right-click: the Automation page, the log, the forms, check for updates, stop) and starts with Windows. The first time it opens the Automation page.
+**The agent** — [`tools/nblab-automation.ps1`](./tools/nblab-automation.ps1), Windows PowerShell, nothing to install — only listens: to the folder, and to the website on the same PC. *Settings → Lab PC tools → Download* gives one file, `nblab-automation.cmd`; double-click it — no window, no sign-in: it runs next to the clock (right-click: print on the Automation page, printers in Settings, the log, the forms, check for updates, stop) and starts with Windows. The first time it opens Settings, to choose the printers.
 
 1. A file finishes arriving in the folder (`.crdownload` and other partial files are ignored; it waits until the file stops growing).
 2. It reads the file's text: text, CSV, HTML, Word, Excel, and PDF (compressed pages and the font maps Windows and browsers use).

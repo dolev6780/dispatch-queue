@@ -914,8 +914,10 @@ button.module:hover { border-color: var(--ink); box-shadow: var(--shadow-sm); tr
 
 /* Dispatch automation */
 .auto-page { gap: 18px; }
-.auto-page .card-title { display: inline-flex; align-items: center; gap: 8px; }
-.auto-page .card-title svg { color: var(--accent-text); }
+.gg-pc .card-title, .gg-print .card-title { display: inline-flex; align-items: center; gap: 8px; }
+.gg-pc .card-title svg, .gg-print .card-title svg { color: var(--accent-text); }
+.gg-needs { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.gg-print .notice .btn { margin-left: auto; }
 .auto-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; font-size: 14px; }
 .auto-facts dt { color: var(--ink-3); }
 .auto-facts dd { color: var(--ink); min-width: 0; }
@@ -977,9 +979,17 @@ button.module:hover { border-color: var(--ink); box-shadow: var(--shadow-sm); tr
 .gg-recent-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gg-recent-meta { font-family: var(--font-mono); font-size: 11.5px; color: var(--ink-3); }
 .gg-selected { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
-.gg-selected-head { display: flex; align-items: center; gap: 8px; color: var(--ink-2); }
+.gg-selected-head { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; color: var(--ink-2); }
 .gg-selected-name { font-size: 16px; color: var(--ink); overflow-wrap: anywhere; }
-.gg-type-pick { max-width: 320px; }
+.gg-type-badge {
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-text);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
 .gg-values { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px 16px; }
 .gg-value { display: flex; flex-direction: column; gap: 2px; }
 .gg-value dt { font-family: var(--font-mono); font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; }
@@ -2123,7 +2133,6 @@ select.input { cursor: pointer; }
 
   .q-aside { display: flex; }
   .gg-print-grid { grid-template-columns: minmax(0, 1fr); }
-  .gg-type-pick { max-width: none; }
   .setting-row { grid-template-columns: auto minmax(0, 1fr); }
   .setting-control { grid-column: 1 / -1; justify-content: flex-end; }
   .setting-control.segmented { width: 100%; }

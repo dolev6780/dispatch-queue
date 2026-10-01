@@ -319,7 +319,7 @@ function App() {
   // The automation agent on this PC: checked on the Automation page, and kept
   // up to date from any page where it has answered before.
   const localAgent = useLocalAgent({
-    active: route === 'automation' && canUse,
+    active: (route === 'automation' || route === 'settings') && canUse,
     automation: canUse ? GRAB_AND_GO : null,
     revision: GRAB_AND_GO_REVISION,
     siteId: activeSiteId,
@@ -550,6 +550,7 @@ function App() {
         site={site}
         automation={GRAB_AND_GO}
         agent={localAgent}
+        onOpenSettings={() => navigate('settings')}
       />
     )
   } else if (route === 'settings') {
@@ -565,6 +566,8 @@ function App() {
         onEnableNotifications={enableDesktopAlerts}
         serviceNow={serviceNow}
         relayInfo={relayInfo}
+        agent={localAgent}
+        automation={GRAB_AND_GO}
       />
     )
   } else if (route === 'assistant') {

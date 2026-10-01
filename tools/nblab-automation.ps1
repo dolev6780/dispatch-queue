@@ -4,7 +4,8 @@
 
 .DESCRIPTION
   It only listens: to one folder on this PC, and to the NBLAB website open on
-  this same PC. Everything else is on the website's Automation page.
+  this same PC. Its printers are chosen in the website's Settings, and files
+  are printed by hand on its Automation page.
 
   When a file finishes arriving in the folder, it reads the text inside it.
   A file with all the automation's words is a Grab & Go file; its return type
@@ -35,7 +36,7 @@
 #>
 param(
   [string]$Test,
-  # Opens the website's Automation page, where everything is set up.
+  # Opens the website's Settings, where this PC's printers are chosen.
   [switch]$Setup,
   [switch]$DryRun,
   # The .cmd this runs from, passed by the .cmd - for "start when I sign in".
@@ -50,7 +51,7 @@ $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
 
 # Raise it with every change: the PCs update themselves to a newer version.
-$AgentVersion = '3.0.0'
+$AgentVersion = '3.0.1'
 # Filled in when the website is built (vite.config.js): where the website is.
 $SiteUrl = '__NBLAB_SITE_URL__'
 # Agents 2.2 check for this line before taking an update; it is not used.
@@ -498,7 +499,7 @@ function Invoke-Prints($Plan, [string]$What, [string]$File, $Lines, $Settings) {
   $dry = [bool]$Settings.dryRun
   $a4 = [string]$Settings.a4Printer
   $stickerPrinter = [string]$Settings.stickerPrinter
-  $noA4 = 'no A4 printer is chosen on this PC (website, Automation page)'
+  $noA4 = 'no A4 printer is chosen on this PC (website, Settings)'
   $all = $What -eq 'all'
 
   if ($Plan -and ($What -eq 'receipt' -or ($all -and $Plan.receipt))) {
@@ -526,7 +527,7 @@ function Invoke-Prints($Plan, [string]$What, [string]$File, $Lines, $Settings) {
   if ($Plan -and ($What -eq 'sticker' -or ($all -and $Plan.sticker))) {
     $text = @($Plan.stickerLines)
     if ($null -ne $Lines -and @($Lines).Count) { $text = @($Lines | ForEach-Object { [string]$_ }) }
-    if (-not $stickerPrinter) { $problems.Add('no sticker printer is chosen on this PC (website, Automation page)') }
+    if (-not $stickerPrinter) { $problems.Add('no sticker printer is chosen on this PC (website, Settings)') }
     else { try { Invoke-PrintSticker $stickerPrinter $text $dry ''; $done.Add('sticker') } catch { $problems.Add("sticker: $($_.Exception.Message)") } }
   }
   return @{ done = @($done); problems = @($problems); dryRun = $dry }
@@ -887,7 +888,7 @@ function Invoke-Arrival([string]$Path) {
   $name = [System.IO.Path]::GetFileName($Path)
   $automation = $script:Config.automation
   if (-not $automation) {
-    Write-AgentLog "Not set up yet - $name was not looked at. Open the Automation page on this PC."
+    Write-AgentLog "Not set up yet - $name was not looked at. Open the NBLAB website on this PC."
     return
   }
   $plan = Get-ReturnPlan $Path $name $automation $script:Settings
@@ -1248,9 +1249,10 @@ $script:DryRunMode = [bool]$DryRun -or $env:NBLAB_DRY_RUN -eq '1'
 $script:Config = Get-AgentConfig
 $script:Settings = Get-AgentSettings $script:Config
 $AutomationPage = if ($SiteUrl -match '^https?://') { $SiteUrl.TrimEnd('/') + '/#/automation' } else { '' }
+$SettingsPage = if ($SiteUrl -match '^https?://') { $SiteUrl.TrimEnd('/') + '/#/settings' } else { '' }
 
 if ($Test) {
-  if (-not $script:Config.automation) { Write-Host 'Not set up yet: open the Automation page on the NBLAB website on this PC.' -ForegroundColor Yellow; exit 1 }
+  if (-not $script:Config.automation) { Write-Host 'Not set up yet: open the NBLAB website on this PC.' -ForegroundColor Yellow; exit 1 }
   $path = (Resolve-Path -LiteralPath $Test).Path
   $plan = Get-ReturnPlan $path ([System.IO.Path]::GetFileName($path)) $script:Config.automation $script:Settings
   Write-Host "NBLAB automation agent $AgentVersion - test of $($plan.name)" -ForegroundColor Cyan
@@ -1272,7 +1274,7 @@ if ($Test) {
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-if ($Setup -and $AutomationPage) { Start-Process $AutomationPage }
+if ($Setup -and $SettingsPage) { Start-Process $SettingsPage }
 
 # One agent per Windows user. Starting another - a newer download, or the
 # same one again - quietly takes over from the one that is running.
@@ -1296,7 +1298,8 @@ $menu = New-Object System.Windows.Forms.ContextMenuStrip
 $script:Stop = $false
 $script:CheckForUpdate = $false
 $script:Restart = $false
-if ($AutomationPage) { [void]$menu.Items.Add('Open the Automation page', $null, { Start-Process $AutomationPage }) }
+if ($AutomationPage) { [void]$menu.Items.Add('Print (Automation page)', $null, { Start-Process $AutomationPage }) }
+if ($SettingsPage) { [void]$menu.Items.Add('Printers (Settings)', $null, { Start-Process $SettingsPage }) }
 [void]$menu.Items.Add('Open the log', $null, { Start-Process notepad.exe $LogPath })
 [void]$menu.Items.Add('Open the files to print', $null, { Start-Process explorer.exe $script:Settings.filesFolder })
 [void]$menu.Items.Add('Check for updates', $null, { $script:CheckForUpdate = $true })
@@ -1376,9 +1379,9 @@ if ($env:NBLAB_UPDATED_FROM) {
   Show-Notice 'NBLAB automation' "Updated to version $AgentVersion."
   Remove-Item Env:NBLAB_UPDATED_FROM
 } elseif (-not $script:Config.automation -or -not $script:Config.a4Printer -or -not $script:Config.stickerPrinter) {
-  Show-Notice 'NBLAB automation' 'Running. Open the Automation page on the NBLAB website on this PC to choose its printers.'
+  Show-Notice 'NBLAB automation' 'Running. Choose this PC''s printers in the NBLAB website: Settings, Printing on this PC.'
   # The very first time, open that page.
-  if ($script:Config.isNew -and $AutomationPage -and -not $Setup) { Start-Process $AutomationPage }
+  if ($script:Config.isNew -and $SettingsPage -and -not $Setup) { Start-Process $SettingsPage }
 } else {
   Show-Notice 'NBLAB automation' "Listening to $(Split-Path -Leaf $script:Settings.watchFolder)."
 }

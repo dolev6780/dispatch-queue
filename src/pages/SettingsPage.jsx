@@ -1,5 +1,6 @@
 import { Bell, BellOff, BellRing, Download, Monitor, Moon, Network, Printer, Sparkles, Sun, Volume2 } from 'lucide-react'
 import { Eyebrow } from '../components/ui'
+import { ThisPcCard } from '../components/ThisPcCard'
 import { formatClockHM } from '../services/format'
 import { bridgeStatus } from '../services/servicenow'
 
@@ -80,7 +81,9 @@ export const SettingsPage = ({
   notificationState,
   onEnableNotifications,
   serviceNow,
-  relayInfo
+  relayInfo,
+  agent,
+  automation
 }) => {
   const watcher = watcherLine(serviceNow, currentTime)
   const alerts = alertsLine(notificationState)
@@ -154,6 +157,11 @@ export const SettingsPage = ({
         </div>
       </section>
 
+      <section className="settings-section" aria-labelledby="printing-title">
+        <h2 id="printing-title" className="eyebrow">Printing on this PC</h2>
+        <ThisPcCard agent={agent} automation={automation} />
+      </section>
+
       <section className="settings-section tools" aria-labelledby="tools-title">
         <h2 id="tools-title" className="eyebrow">Lab PC tools</h2>
 
@@ -212,12 +220,12 @@ export const SettingsPage = ({
             <span className="module-name">Dispatch automation agent</span>
             <span className="module-desc">
               On every lab PC that handles Grab &amp; Go returns. It only listens — to the folder the files arrive in, and
-              to this website on the same PC — and prints. Everything else is on the Automation page. One file, nothing to
-              install, and nothing leaves the PC.
+              to this website on the same PC — and prints. Files are printed by hand on the Automation page. One file,
+              nothing to install, and nothing leaves the PC.
             </span>
             <ol className="tool-steps">
               <li>Press <strong>Download</strong> and double-click <code>nblab-automation.cmd</code>. No window opens: it runs next to the clock and starts with Windows.</li>
-              <li>Open <strong>Automation</strong> on this PC. If Chrome asks whether this site may look for devices on this PC, choose <strong>Allow</strong>. Choose this PC&apos;s <strong>A4 printer</strong> and <strong>sticker printer</strong>.</li>
+              <li>Come back to this page. If Chrome asks whether this site may look for devices on this PC, choose <strong>Allow</strong>. Under <strong>Printing on this PC</strong>, choose the <strong>A4 printer</strong> and the <strong>sticker printer</strong>.</li>
               <li>Put the forms (like <code>LDO.pdf</code>) in the files folder, named as in the automation.</li>
             </ol>
             <span className="tool-note">
