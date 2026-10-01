@@ -60,6 +60,7 @@ src/
     QueuePage.jsx          day bar, on duty, the queue, not in queue, jobs done today (desktop + phone)
     ProcessesPage.jsx      the site's work processes: list, steps, notes; admins write them
     AssistantPage.jsx      the AI tech assistant: chat with Gemini through the main PC's relay
+    SettingsPage.jsx       this device (theme, chimes, desktop alerts) and the lab-PC tools' setup and status
     SignInPage.jsx         single work-ID field; first-time setup (first global admin + first site)
     SiteSetupPage.jsx      moves a pre-sites database into its first site
     AdminPage.jsx          sites (global); the site's workers — add, role, move, hide, revoke; shift hours
@@ -199,7 +200,7 @@ A process can be **linked to one job type**. From then on, every new job of that
 **Install**
 
 1. Install the **Tampermonkey** extension in Edge or Chrome (if Intel IT allows it). In the extension's details, turn on *Allow user scripts* (Chrome) or *Developer mode* (Edge), and set *Site access* to *On all sites*. If ServiceNow still says Tampermonkey has no access, Intel's policy blocks extensions there (`edge://policy` → `runtime_blocked_hosts`).
-2. On the app's Home page, press **Install** under *Tools for the lab PC* (or open <https://dolev6780.github.io/dispatch-queue/servicenow-watcher.user.js>), then **Install** in Tampermonkey. The site publishes the script next to the app (see `vite.config.js`), and Tampermonkey checks it there for updates, so fixes reach the lab PC by themselves.
+2. On the app's **Settings** page (⚙ in the top bar), press **Install** under *Lab PC tools* (or open <https://dolev6780.github.io/dispatch-queue/servicenow-watcher.user.js>), then **Install** in Tampermonkey. The site publishes the script next to the app (see `vite.config.js`), and Tampermonkey checks it there for updates, so fixes reach the lab PC by themselves.
 3. If your ServiceNow address does not end in `service-now.com`, add a `// @match https://<your address>/*` line to the header.
 4. Open ServiceNow. A small badge appears bottom-left: click it and enter your **assignment group(s)** exactly as named in ServiceNow, and `sc_task` (catalog tasks) or `incident`.
 5. Press **Test** on the badge. It checks ServiceNow right away and shows a real notification for the newest waiting task (or says nothing is waiting), with the chime — so access, notifications and sound are all checked in one click. The badge says *Test OK*, or what is wrong.
@@ -221,7 +222,7 @@ node servicenow-relay.mjs --site l12      # only people working at site l12 may 
 - **Plain http has two side effects,** handled in the app: the browser's `crypto.subtle` is missing there, so sign-in hashing falls back to a JS SHA-256 (`@noble/hashes`, same result — tested), and desktop notifications are unavailable (browsers allow them only on https).
 - **Firewall:** the other PCs can only reach the relay if the main PC's firewall allows incoming connections on port 8787. On a managed PC that may need IT.
 
-The Home page's *Tools for the lab PC* section has the download and these steps, and its status line says whether this PC gets the list from the watcher in this browser or from the main PC.
+The **Settings** page's *Lab PC tools* section has the download and these steps, and its status line says whether this PC gets the list from the watcher in this browser or from the main PC.
 
 ## AI tech assistant 🤖
 
@@ -239,6 +240,13 @@ An **Assistant** tab where technicians ask IT and PC questions and get step-by-s
 - **Answers** are Markdown rendered as React elements — never as HTML — so nothing in an answer can run in the page; Hebrew answers read right to left.
 
 `gemini.key` is in `.gitignore`.
+
+## Settings ⚙
+
+The ⚙ button in the top bar (and *Settings* in the phone menu) opens one page for everything that is set up rather than used:
+
+- **This device** — light or dark theme, shift-change and job chimes (with a test), and desktop alerts for new jobs: whether this browser allows them, and an *Enable* button when it has not been asked yet. All remembered per device.
+- **Lab PC tools** — the ServiceNow watcher (*Install*), the relay that shares it with every lab PC (*Download relay*), and the AI tech assistant (the Gemini key on the main PC), each with its steps and a status line for this browser.
 
 ## Firebase 🔥
 

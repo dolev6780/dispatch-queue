@@ -889,6 +889,29 @@ button.module:hover { border-color: var(--ink); box-shadow: var(--shadow-sm); tr
   color: var(--ink-2);
 }
 
+/* Settings */
+.settings-page { gap: 24px; }
+.settings-section { display: flex; flex-direction: column; gap: 10px; }
+.settings-list { padding: 4px 20px; gap: 0; }
+.setting-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+}
+.setting-row:first-child { border-top: none; }
+.setting-row .module-icon { margin: 0; }
+.setting-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.setting-name { font-size: 16px; font-weight: 700; }
+.setting-desc { font-size: 14px; color: var(--ink-2); }
+.setting-text .tool-status { margin-top: 4px; }
+.setting-control { display: flex; align-items: center; gap: 10px; }
+.setting-control.segmented { display: grid; width: 220px; }
+.setting-control.segmented button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+.topbar-icon.is-active { background: var(--night-3); color: var(--night-ink); }
+
 /* Tools to install on a lab PC */
 .tools { display: flex; flex-direction: column; gap: 10px; }
 .tool-card {
@@ -2021,6 +2044,9 @@ select.input { cursor: pointer; }
   .q-row .q-ctrl { margin-left: auto; }
 
   .q-aside { display: flex; }
+  .setting-row { grid-template-columns: auto minmax(0, 1fr); }
+  .setting-control { grid-column: 1 / -1; justify-content: flex-end; }
+  .setting-control.segmented { width: 100%; }
   .bubble { max-width: 94%; }
   .assistant-page .page-head-actions { justify-content: space-between; }
   .sn-cards > li { flex-basis: 100%; }

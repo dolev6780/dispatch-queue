@@ -18,6 +18,7 @@ import { SiteSetupPage } from './pages/SiteSetupPage'
 import { AdminPage } from './pages/AdminPage'
 import { ProcessesPage } from './pages/ProcessesPage'
 import { AssistantPage } from './pages/AssistantPage'
+import { SettingsPage } from './pages/SettingsPage'
 
 import { useHashRoute } from './hooks/useHashRoute'
 import { useAuth } from './hooks/useAuth'
@@ -79,11 +80,11 @@ function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
-  const toggleTheme = () => setTheme(current => {
-    const next = current === 'dark' ? 'light' : 'dark'
+  const changeTheme = (next) => {
     store(THEME_KEY, next)
-    return next
-  })
+    setTheme(next)
+  }
+  const toggleTheme = () => changeTheme(theme === 'dark' ? 'light' : 'dark')
 
   // ---- Session ---------------------------------------------------------------
   const auth = useAuth()
@@ -530,6 +531,21 @@ function App() {
         onDraft={draftProcess}
       />
     )
+  } else if (route === 'settings') {
+    content = (
+      <SettingsPage
+        currentTime={currentTime}
+        theme={theme}
+        onThemeChange={changeTheme}
+        soundEnabled={soundEnabled}
+        onToggleSound={toggleSound}
+        onTestChime={handleTestChime}
+        notificationState={notificationState}
+        onEnableNotifications={enableDesktopAlerts}
+        serviceNow={serviceNow}
+        relayInfo={relayInfo}
+      />
+    )
   } else if (route === 'assistant') {
     content = (
       <AssistantPage
@@ -587,8 +603,6 @@ function App() {
         }}
         tempUntil={!global && isTempMoveActive(profile, currentTime) ? formatShortDate(lastDayOf(profile.tempEndsAt)) : null}
         onNavigate={navigate}
-        serviceNow={serviceNow}
-        relayInfo={relayInfo}
       />
     )
   }
@@ -630,8 +644,6 @@ function App() {
           onDelete={(jobId) => jobs.remove(jobId)}
           onOpenChecklist={setChecklistJobId}
           onAskAi={askAiAbout}
-          notificationState={notificationState}
-          onEnableNotifications={enableDesktopAlerts}
         />
       )}
       {route === 'queue' && <ServiceNowStrip bridge={serviceNow} now={currentTime} limit={isNarrow ? 3 : 6} />}

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ChevronDown, LogOut, Menu, Moon, Sun, X } from 'lucide-react'
+import { ChevronDown, LogOut, Menu, Moon, Settings, Sun, X } from 'lucide-react'
 import { Logo } from './ui'
 import { formatClockHMS, initialsOf, siteLabel } from '../services/format'
 
@@ -115,7 +115,7 @@ export const AppBar = ({
               </div>
               <SitePicker site={site} sites={sites} onSwitchSite={onSwitchSite} className="is-light" />
               <div className="sheet-links">
-                {tabs.map(tab => (
+                {[...tabs, { id: 'settings', label: 'Settings' }].map(tab => (
                   <button key={tab.id} className={`sheet-link ${route === tab.id ? 'is-active' : ''}`}
                     onClick={() => go(tab.id)} aria-current={route === tab.id ? 'page' : undefined}>
                     {tab.label}
@@ -168,6 +168,10 @@ export const AppBar = ({
             <span className="who-name">{name}</span>
             {isGlobal && <span className="role-tag">Global admin</span>}
           </span>
+          <button className={`topbar-icon ${route === 'settings' ? 'is-active' : ''}`} onClick={() => onNavigate('settings')}
+            title="Settings" aria-label="Settings" aria-current={route === 'settings' ? 'page' : undefined}>
+            <Settings size={17} />
+          </button>
           <button className="topbar-icon" onClick={onSignOut} title="Sign out" aria-label="Sign out">
             <LogOut size={17} />
           </button>

@@ -10,6 +10,9 @@ export const useRelayInfo = () => {
   const [info, setInfo] = useState({ isRelay: false, ai: false, model: null })
 
   useEffect(() => {
+    // The relay serves plain http, so an https page (the website) never comes
+    // from it — no need to ask, and no failed request in the console.
+    if (window.location.protocol !== 'http:') return undefined
     let active = true
     fetch('api/servicenow/ping', { cache: 'no-store' })
       .then(res => (res.ok ? res.json() : null))

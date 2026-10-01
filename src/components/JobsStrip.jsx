@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { BellRing, Check, ChevronDown, ChevronRight, ListChecks, Plus, Sparkles, Trash2, X } from 'lucide-react'
+import { Check, ChevronDown, ChevronRight, ListChecks, Plus, Sparkles, Trash2, X } from 'lucide-react'
 import { JobChip } from './ui'
 import { canDeleteJob, canFinishJob, checklistOf, jobTypeOf, waitingFor } from '../services/jobs'
 import { firstNameOf, formatClockHM } from '../services/format'
@@ -77,20 +77,11 @@ export const JobsStrip = ({
   onComplete,
   onDelete,
   onOpenChecklist,
-  onAskAi,
-  notificationState,
-  onEnableNotifications
+  onAskAi
 }) => {
   const [expanded, setExpanded] = useState(false)
   const count = jobs.length
   const countLabel = count === 0 ? 'No open jobs' : `${count} open ${count === 1 ? 'job' : 'jobs'}`
-
-  const alerts = notificationState === 'default' && (
-    <button className="btn btn-sm btn-ghost" onClick={onEnableNotifications}
-      title="Get a desktop notification when a job is assigned to you">
-      <BellRing size={14} /><span>Enable desktop alerts</span>
-    </button>
-  )
 
   const list = count > 0 && (
     <ul className="job-cards">
@@ -118,7 +109,6 @@ export const JobsStrip = ({
         {expanded && (
           <div className="jobs-band-body">
             {list}
-            {alerts}
           </div>
         )}
       </section>
@@ -130,7 +120,6 @@ export const JobsStrip = ({
       <div className="jobs-band-inner">
         <div className="jobs-band-head">
           <span className="jobs-count">{countLabel}</span>
-          {alerts}
           {onNew && (
             <button className="btn btn-sm btn-ghost" onClick={onNew}>
               <Plus size={14} /><span>Log a job</span>
@@ -139,11 +128,6 @@ export const JobsStrip = ({
         </div>
         {list}
       </div>
-      {notificationState === 'denied' && (
-        <p className="jobs-band-note">
-          Desktop alerts are blocked in this browser — allow notifications for this site in the browser settings to get them.
-        </p>
-      )}
     </section>
   )
 }
