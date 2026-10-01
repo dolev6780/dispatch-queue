@@ -1,4 +1,4 @@
-import { Bell, BellOff, BellRing, Download, Monitor, Moon, Network, Sparkles, Sun, Volume2 } from 'lucide-react'
+import { Bell, BellOff, BellRing, Download, Monitor, Moon, Network, Printer, Sparkles, Sun, Volume2 } from 'lucide-react'
 import { Eyebrow } from '../components/ui'
 import { formatClockHM } from '../services/format'
 import { bridgeStatus } from '../services/servicenow'
@@ -7,6 +7,8 @@ import { bridgeStatus } from '../services/servicenow'
 // what makes Tampermonkey offer to install it.
 const WATCHER_URL = `${import.meta.env.BASE_URL}servicenow-watcher.user.js`
 const RELAY_URL = `${import.meta.env.BASE_URL}servicenow-relay.mjs`
+const AGENT_URL = `${import.meta.env.BASE_URL}nblab-automation.ps1`
+const STARTER_URL = `${import.meta.env.BASE_URL}nblab-automation.cmd`
 
 /** Where the ServiceNow watcher stands for THIS browser, in words. */
 const watcherLine = (bridge, now) => {
@@ -203,6 +205,37 @@ export const SettingsPage = ({
           <a className="btn btn-outline tool-install" href={RELAY_URL} download="servicenow-relay.mjs">
             <Download size={16} /><span>Download relay</span>
           </a>
+        </div>
+
+        <div className="tool-card">
+          <span className="module-icon"><Printer size={20} /></span>
+          <div className="tool-text">
+            <span className="module-name">Dispatch automation agent</span>
+            <span className="module-desc">
+              On every lab PC that receives Grab &amp; Go files: watches the Downloads folder, reads each new file,
+              and prints what its automation says (Automation page). A Windows PowerShell script — nothing to
+              install — and nothing leaves the PC.
+            </span>
+            <ol className="tool-steps">
+              <li>Press <strong>Download agent</strong> and <strong>Download starter</strong>, and put both files in one folder on the PC, e.g. <code>Documents\NBLAB</code>.</li>
+              <li>On the Automation page, press <strong>Export for the PCs</strong> and save <code>automations.json</code> in the shared folder. Put the documents to print (like <code>LDO.pdf</code>) in a <code>documents</code> folder next to it.</li>
+              <li>Double-click <code>nblab-automation.cmd</code>. It creates <code>nblab-automation.config.json</code> — open it from the tray icon (<em>Open settings</em>), set <code>sharedFolder</code> and <code>stickerPrinter</code>, and start it again.</li>
+              <li>To start it at every sign-in, put a shortcut to <code>nblab-automation.cmd</code> in the Startup folder (Win+R, <code>shell:startup</code>).</li>
+            </ol>
+            <span className="tool-note">
+              Try a file without printing: <code>powershell -ExecutionPolicy Bypass -File nblab-automation.ps1 -Test "path\to\file.pdf"</code>,
+              or set <code>dryRun</code> to <code>true</code>. PDFs print through the PC&apos;s PDF app (it needs a Print command, like Adobe
+              Reader). If company policy blocks scripts, IT has to allow it. After changing automations, export again.
+            </span>
+          </div>
+          <div className="tool-install tool-downloads">
+            <a className="btn btn-dark" href={AGENT_URL} download="nblab-automation.ps1">
+              <Download size={16} /><span>Download agent</span>
+            </a>
+            <a className="btn btn-outline" href={STARTER_URL} download="nblab-automation.cmd">
+              <Download size={16} /><span>Download starter</span>
+            </a>
+          </div>
         </div>
 
         <div className="tool-card">

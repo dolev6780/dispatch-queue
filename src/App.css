@@ -912,6 +912,87 @@ button.module:hover { border-color: var(--ink); box-shadow: var(--shadow-sm); tr
 .setting-control.segmented button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
 .topbar-icon.is-active { background: var(--night-3); color: var(--night-ink); }
 
+/* Dispatch automation */
+.auto-page { gap: 18px; }
+.auto-how {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  counter-reset: how;
+}
+.auto-how li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.auto-how svg { color: var(--accent-text); flex-shrink: 0; }
+.auto-list { list-style: none; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.auto-card { gap: 12px; }
+.auto-card.is-off { opacity: 0.65; }
+.auto-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.auto-title { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.auto-title h3 { font-size: 18px; font-weight: 700; }
+.auto-state {
+  padding: 1px 7px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.auto-state.is-on { background: var(--green-soft); color: var(--green-text); }
+.auto-state.is-off { background: var(--beige); color: var(--beige-ink); }
+.auto-actions { display: flex; align-items: center; gap: 6px; }
+.auto-facts { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; font-size: 14px; }
+.auto-facts dt { color: var(--ink-3); }
+.auto-facts dd { color: var(--ink); }
+.auto-words { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip.is-static { padding: 2px 9px; font-size: 13px; cursor: default; }
+.chip.is-static:hover { border-color: var(--line-strong); background: var(--surface); }
+.auto-notes { font-size: 13.5px; color: var(--ink-3); white-space: pre-wrap; }
+.sticker-preview {
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  max-width: 100%;
+  padding: 10px 14px;
+  border-radius: 6px;
+  background: #fff;
+  color: #111;
+  border: 1px dashed var(--line-strong);
+  font-family: Arial, sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  line-height: 1.3;
+  box-shadow: var(--shadow-sm);
+}
+.auto-try textarea { min-height: 150px; }
+.auto-try-result { display: flex; flex-direction: column; gap: 10px; }
+.auto-try-file { position: relative; cursor: pointer; }
+.auto-try-file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.print-row { display: flex; align-items: center; gap: 10px; }
+.print-row .input { flex: 1; height: 38px; }
+.print-row-name { flex: 1; font-size: 14px; font-weight: 600; }
+.print-row-hint { font-size: 13px; color: var(--ink-3); white-space: nowrap; }
+.print-row-dot { width: 38px; display: grid; place-items: center; }
+.print-row-dot::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--ink-3); }
+.input.is-copies { width: 72px; flex: none; height: 38px; padding: 0 8px; }
+.input.is-short { max-width: 130px; }
+.print-add { align-self: flex-start; }
+.sticker-setup { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: var(--radius); background: var(--surface-sunk); border: 1px solid var(--line); }
+.automation-on { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+.field-hint code { font-family: var(--font-mono); font-size: 12px; }
+.tool-downloads { display: flex; flex-direction: column; gap: 8px; }
+
 /* Tools to install on a lab PC */
 .tools { display: flex; flex-direction: column; gap: 10px; }
 .tool-card {
@@ -2044,6 +2125,10 @@ select.input { cursor: pointer; }
   .q-row .q-ctrl { margin-left: auto; }
 
   .q-aside { display: flex; }
+  .auto-how, .auto-list { grid-template-columns: minmax(0, 1fr); }
+  .print-row { flex-wrap: wrap; }
+  .print-row-hint { display: none; }
+  .input.is-short { max-width: none; }
   .setting-row { grid-template-columns: auto minmax(0, 1fr); }
   .setting-control { grid-column: 1 / -1; justify-content: flex-end; }
   .setting-control.segmented { width: 100%; }

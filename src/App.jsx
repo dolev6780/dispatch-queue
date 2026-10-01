@@ -19,12 +19,14 @@ import { AdminPage } from './pages/AdminPage'
 import { ProcessesPage } from './pages/ProcessesPage'
 import { AssistantPage } from './pages/AssistantPage'
 import { SettingsPage } from './pages/SettingsPage'
+import { AutomationPage } from './pages/AutomationPage'
 
 import { useHashRoute } from './hooks/useHashRoute'
 import { useAuth } from './hooks/useAuth'
 import { useDispatchQueue } from './hooks/useDispatchQueue'
 import { useJobs } from './hooks/useJobs'
 import { useProcesses } from './hooks/useProcesses'
+import { useAutomations } from './hooks/useAutomations'
 import { useServiceNowBridge } from './hooks/useServiceNowBridge'
 import { useServiceNowRelay } from './hooks/useServiceNowRelay'
 import { useRelayInfo } from './hooks/useRelayInfo'
@@ -35,7 +37,7 @@ import { watchSites, watchSite } from './services/db'
 import { alertKindFor, jobTypeOf, processFields, toggleCheck } from './services/jobs'
 import { notificationPermission, requestNotificationPermission } from './services/notify'
 import { toDateKey } from './services/dailyReset'
-import { DISPATCH_QUEUE, WORK_PROCESSES } from './services/features'
+import { DISPATCH_QUEUE, WORK_PROCESSES, DISPATCH_AUTOMATION } from './services/features'
 import { askAssistant } from './services/assistantApi'
 import { firstNameOf, formatClockHM, formatShortDate } from './services/format'
 import {
@@ -313,6 +315,7 @@ function App() {
   // A job of a type with a process carries its steps; the checklist dialog
   // follows the live job, so ticks from another station show up here too.
   const workProcesses = useProcesses({ siteId: activeSiteId, canRead: canUse })
+  const dispatchAutomations = useAutomations({ siteId: activeSiteId, canRead: canUse })
 
   // Unassigned ServiceNow tasks: from the main PC's relay when this page was
   // opened from it, otherwise from the watcher in this browser (if any).
@@ -531,6 +534,18 @@ function App() {
         onDraft={draftProcess}
       />
     )
+  } else if (route === 'automation') {
+    content = (
+      <AutomationPage
+        key={activeSiteId}
+        site={site}
+        automations={dispatchAutomations.automations}
+        loaded={dispatchAutomations.loaded}
+        error={dispatchAutomations.error}
+        canEdit={isSiteAdminHere}
+        uid={auth.user.uid}
+      />
+    )
   } else if (route === 'settings') {
     content = (
       <SettingsPage
@@ -599,7 +614,8 @@ function App() {
         openJobsCount={jobs.openJobs.length}
         summaries={{
           [DISPATCH_QUEUE]: !todayDay.isWorkDay ? 'Day off today' : todayCount > 0 ? `${todayCount} in queue today` : 'Queue empty today',
-          [WORK_PROCESSES]: `${workProcesses.processes.length} ${workProcesses.processes.length === 1 ? 'process' : 'processes'}`
+          [WORK_PROCESSES]: `${workProcesses.processes.length} ${workProcesses.processes.length === 1 ? 'process' : 'processes'}`,
+          [DISPATCH_AUTOMATION]: `${dispatchAutomations.automations.length} ${dispatchAutomations.automations.length === 1 ? 'automation' : 'automations'}`
         }}
         tempUntil={!global && isTempMoveActive(profile, currentTime) ? formatShortDate(lastDayOf(profile.tempEndsAt)) : null}
         onNavigate={navigate}

@@ -24,8 +24,9 @@ import { DEFAULT_DAY_SCHEDULES } from './schedule'
 import { resolveDailyReset } from './dailyReset'
 import { toSlug } from './queueOps'
 import { USERS } from './authService'
-import { DISPATCH_QUEUE, WORK_PROCESSES } from './features'
+import { DISPATCH_QUEUE, WORK_PROCESSES, DISPATCH_AUTOMATION } from './features'
 import { cleanSteps } from './processes'
+import { cleanAutomation } from './automation'
 
 /**
  * Firestore data layer — everything is scoped to a site.
@@ -35,6 +36,7 @@ import { cleanSteps } from './processes'
  *   sites/{siteId}/features/{featureId}/state/current   the board
  *   sites/{siteId}/features/dispatch-queue/jobs/{jobId}    jobs
  *   sites/{siteId}/features/work-processes/processes/{id}  work processes
+ *   sites/{siteId}/features/dispatch-automation/automations/{id}  what lab PCs print
  *
  * Every account is a worker at its site. The queue draws on the people who
  * work at the site today: its residents, minus anyone temporarily away, plus
@@ -143,12 +145,14 @@ export const deleteSite = async (siteId, featureIds) => {
     legacyWorkers.docs.forEach(worker => batch.delete(worker.ref))
     batch.delete(stateRef(db, siteId, featureId))
   }
-  const [jobs, processes] = await Promise.all([
+  const [jobs, processes, automations] = await Promise.all([
     getDocs(jobsCollection(db, siteId)),
-    getDocs(processesCollection(db, siteId))
+    getDocs(processesCollection(db, siteId)),
+    getDocs(automationsCollection(db, siteId))
   ])
   jobs.docs.forEach(job => batch.delete(job.ref))
   processes.docs.forEach(process => batch.delete(process.ref))
+  automations.docs.forEach(automation => batch.delete(automation.ref))
   batch.delete(doc(db, 'sites', siteId))
   await batch.commit()
 }
@@ -491,3 +495,36 @@ export const saveProcess = async (siteId, processId, values, uid) => {
 /** Open jobs keep their own copy of the steps, so deleting is always safe. */
 export const deleteProcess = (siteId, processId) =>
   deleteDoc(doc(processesCollection(requireDb(), siteId), processId))
+
+// ---------------------------------------------------------------------------
+// Dispatch automation
+// ---------------------------------------------------------------------------
+
+const automationsCollection = (db, siteId) => collection(db, ...featurePath(siteId, DISPATCH_AUTOMATION), 'automations')
+
+/** A site's dispatch automations, live. */
+export const watchAutomations = (siteId, onChange, onError) => {
+  const db = getDb()
+  if (!db || !siteId) return () => {}
+  return onSnapshot(
+    automationsCollection(db, siteId),
+    (snapshot) => onChange(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))),
+    onError
+  )
+}
+
+/** Create an automation (no id) or replace its content (with id). Returns the id. */
+export const saveAutomation = async (siteId, automationId, values, uid) => {
+  const db = requireDb()
+  const data = { ...cleanAutomation(values), updatedBy: uid, updatedAt: serverTimestamp() }
+  if (automationId) {
+    await updateDoc(doc(automationsCollection(db, siteId), automationId), data)
+    return automationId
+  }
+  const ref = doc(automationsCollection(db, siteId))
+  await setDoc(ref, { ...data, createdAt: serverTimestamp() })
+  return ref.id
+}
+
+export const deleteAutomation = (siteId, automationId) =>
+  deleteDoc(doc(automationsCollection(requireDb(), siteId), automationId))

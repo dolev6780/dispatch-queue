@@ -163,6 +163,30 @@ service cloud.firestore {
         && d.updatedAt == request.time;
     }
 
+    // A dispatch automation: when a file whose content holds all the keywords
+    // arrives on a lab PC, the automation agent there prints the file, the
+    // listed documents and a sticker. The agent reads an exported copy; this
+    // is the copy admins edit. Inner list items are not checked here (rules
+    // cannot loop) — only admins write, and the agent validates what it reads.
+    function validAutomation(d) {
+      return d.keys().hasOnly(['name', 'enabled', 'keywords', 'fileTypes', 'printFile', 'fileCopies',
+                               'documents', 'sticker', 'stickerLines', 'stickerFields', 'notes',
+                               'createdAt', 'updatedAt', 'updatedBy'])
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 80
+        && d.enabled is bool
+        && d.keywords is list && d.keywords.size() > 0 && d.keywords.size() <= 10
+        && d.fileTypes is list && d.fileTypes.size() <= 10
+        && d.printFile is bool
+        && d.fileCopies is int && d.fileCopies >= 1 && d.fileCopies <= 5
+        && d.documents is list && d.documents.size() <= 10
+        && d.sticker is bool
+        && d.stickerLines is list && d.stickerLines.size() <= 8
+        && d.stickerFields is list && d.stickerFields.size() <= 10
+        && (!('notes' in d) || (d.notes is string && d.notes.size() <= 1000))
+        && d.updatedBy == request.auth.uid
+        && d.updatedAt == request.time;
+    }
+
     // A job either has no process, or carries an exact copy of one of this
     // site's processes — title and steps — with every step still unticked.
     function validJobProcess(d, siteId) {
@@ -350,6 +374,16 @@ service cloud.firestore {
         allow create, update: if featureId == 'work-processes'
           && isHomeAdmin(siteId)
           && validProcess(request.resource.data);
+        allow delete: if isHomeAdmin(siteId);
+      }
+
+      // Dispatch automation: what the lab PCs print when a file arrives. Kept
+      // by the site's administrators, readable by everyone working there.
+      match /features/{featureId}/automations/{automationId} {
+        allow read: if featureId == 'dispatch-automation' && (belongsTo(siteId) || isHomeAdmin(siteId));
+        allow create, update: if featureId == 'dispatch-automation'
+          && isHomeAdmin(siteId)
+          && validAutomation(request.resource.data);
         allow delete: if isHomeAdmin(siteId);
       }
 

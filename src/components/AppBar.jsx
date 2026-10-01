@@ -6,7 +6,8 @@ import { formatClockHMS, initialsOf, siteLabel } from '../services/format'
 const BASE_TABS = [
   { id: 'home', label: 'Home' },
   { id: 'queue', label: 'Queue' },
-  { id: 'processes', label: 'Processes' }
+  { id: 'processes', label: 'Processes' },
+  { id: 'automation', label: 'Automation' }
 ]
 
 const CONNECTION = {

@@ -61,6 +61,7 @@ src/
     ProcessesPage.jsx      the site's work processes: list, steps, notes; admins write them
     AssistantPage.jsx      the AI tech assistant: chat with Gemini through the main PC's relay
     SettingsPage.jsx       this device (theme, chimes, desktop alerts) and the lab-PC tools' setup and status
+    AutomationPage.jsx     dispatch automations: what lab PCs print when a Grab & Go file downloads; Try it; export
     SignInPage.jsx         single work-ID field; first-time setup (first global admin + first site)
     SiteSetupPage.jsx      moves a pre-sites database into its first site
     AdminPage.jsx          sites (global); the site's workers — add, role, move, hide, revoke; shift hours
@@ -86,6 +87,7 @@ src/
     jobs.js                job types, new-job detection, checklists, who may close a job (pure, tested)
     processes.js           work-process validation, linking to job types (pure, tested)
     assistant.js           what the AI assistant sends, and its answers read as Markdown (pure, tested)
+    automation.js          dispatch automations: matching, details, stickers, export (pure, tested)
     servicenow.js          the ServiceNow list handed over by the watcher or the relay (pure, tested)
     notify.js              desktop notifications (browser Notification API)
     schedule.js            shift arithmetic (pure, tested)
@@ -96,16 +98,19 @@ src/
     firebase.js            app / auth / Firestore bootstrap
     soundEffects.js        Web Audio turnover chimes
 tools/
+  nblab-automation.ps1        lab-PC agent: watches Downloads, prints per automation (npm run test:agent)
+  nblab-automation.cmd        starts the agent hidden
   servicenow-watcher.user.js  lab-PC browser script: notifies on new unassigned ServiceNow tasks (tested)
   servicenow-relay.mjs        main-PC server: shares the unassigned list with the other lab PCs, in memory,
                               and answers the AI assistant with the Gemini key it keeps (tested)
 rules-tests/
-  rules.test.mjs           196-case security-rules suite, run in the Firestore emulator
+  rules.test.mjs           216-case security-rules suite, run in the Firestore emulator
 ```
 
 ```bash
-npm test             # 422 assertions on the pure logic, no browser or network
-npm run test:rules   # 196 security-rule cases in the local Firestore emulator (needs Java)
+npm test             # 453 assertions on the pure logic, no browser or network
+npm run test:agent   # 39 cases for the lab-PC automation agent (Windows PowerShell)
+npm run test:rules   # 216 security-rule cases in the local Firestore emulator (needs Java)
 ```
 
 CI runs `lint` and `test` before every deploy. The rules suite runs locally — it needs Java and the Firebase CLI.
@@ -240,6 +245,29 @@ An **Assistant** tab where technicians ask IT and PC questions and get step-by-s
 - **Answers** are Markdown rendered as React elements — never as HTML — so nothing in an answer can run in the page; Hebrew answers read right to left.
 
 `gemini.key` is in `.gitignore`.
+
+## Dispatch automation 🖨️
+
+When a worker returns a user's PC through **Grab & Go**, the file the return produces downloads on their lab PC — and that PC prints what the return needs: the file itself, the documents for that type of return (like the LDO form), and a sticker on the sticker printer with the ticket and asset details.
+
+**On the website** (*Automation* tab), site admins write the automations. Each one has:
+
+- **words to find in the file** — all of them must be in the file's *content* (any capitals), which is how the return type is told apart; optionally, only some file types;
+- **what to print** — the downloaded file (×1–5), documents by file name from the shared folder (×1–5 each), and a sticker;
+- **the sticker** — its lines, with `{placeholders}` filled from **details read from the file** (a detail is what follows its label: `Asset tag: NB-48213` gives `NB-48213`; in CSV or table files, the next cell), plus `{file}`, `{date}`, `{time}`, `{automation}`.
+
+*Try it* on the page runs the same rules on pasted text — which automation would trigger and the sticker it would print — without printing anything. *Export for the PCs* saves `automations.json`.
+
+**On each lab PC**, the agent — [`tools/nblab-automation.ps1`](./tools/nblab-automation.ps1), a Windows PowerShell script, nothing to install — watches the Downloads folder:
+
+1. A browser download finishes (`.crdownload` and other partial files are ignored; it waits until the file stops growing).
+2. It reads the file's text: text, CSV, HTML, Word, Excel, and PDF (compressed pages and the font maps Windows and browsers use).
+3. The first automation whose words are all in it is applied. A Windows notification says what was printed, or what went wrong; every run is in `nblab-automation.log`.
+4. Files print through the PC's default app for that file type (PDFs need a reader with a Print command, like Adobe Reader); the sticker is drawn to fit the label on the named sticker printer.
+
+The **shared folder** holds `automations.json` and a `documents` folder — a network share, so every PC prints from one place, or a folder on each PC. Grab & Go files still download to each PC's own Downloads. Settings are in `nblab-automation.config.json` next to the script (`watchFolder`, `sharedFolder`, `stickerPrinter`, `dryRun`); `-Test <file>` shows what the agent reads from a file and what it would print. Setup steps and downloads: **Settings → Lab PC tools**. Nothing leaves the PC.
+
+The matching and detail rules exist twice — `src/services/automation.js` (the page) and the agent — and their tests mirror each other case for case (`npm test`, `npm run test:agent`).
 
 ## Settings ⚙
 

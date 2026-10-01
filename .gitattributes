@@ -1,0 +1,2 @@
+# Windows batch files need Windows line endings, also when built on Linux.
+*.cmd text eol=crlf

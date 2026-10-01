@@ -9,6 +9,7 @@
 
 export const DISPATCH_QUEUE = 'dispatch-queue'
 export const WORK_PROCESSES = 'work-processes'
+export const DISPATCH_AUTOMATION = 'dispatch-automation'
 
 export const FEATURES = [
   {
@@ -24,5 +25,12 @@ export const FEATURES = [
     name: 'Work Processes',
     description: 'Step-by-step guides for the lab\'s work. A linked job type turns into a checklist on every job.',
     icon: 'book'
+  },
+  {
+    id: DISPATCH_AUTOMATION,
+    route: 'automation',
+    name: 'Dispatch Automation',
+    description: 'When a Grab & Go file downloads on a lab PC, print what that return needs: the file, its documents and a sticker.',
+    icon: 'printer'
   }
 ]

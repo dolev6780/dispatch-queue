@@ -403,6 +403,39 @@ await deny('no ticking once done', () => updateDoc(doc(w2, ...jobsOf('haifa'), '
 await allow('a site admin deletes a process; jobs keep their copy', () => deleteDoc(doc(wa, ...procOf('haifa'), 'p2')))
 
 // ---------------------------------------------------------------------------
+console.log('\n--- dispatch automation ---')
+const DA = ['features', 'dispatch-automation', 'automations']
+const autoOf = (site) => ['sites', site, ...DA]
+const automation = (by, extra) => ({
+  name: 'Grab & Go return', enabled: true, keywords: ['Grab & Go', 'Return'], fileTypes: ['pdf'],
+  printFile: true, fileCopies: 1, documents: [{ file: 'LDO.pdf', copies: 1 }],
+  sticker: true, stickerLines: ['{ticket}', 'Asset {asset}'], stickerFields: [{ name: 'asset', label: 'Asset tag' }],
+  notes: '', createdAt: serverTimestamp(), updatedAt: serverTimestamp(), updatedBy: by, ...extra
+})
+await allow('a site admin writes an automation for their site', () => setDoc(doc(wa, ...autoOf('haifa'), 'a1'), automation('wa')))
+await allow('a global admin writes one for any site', () => setDoc(doc(as('pg'), ...autoOf('haifa'), 'a2'), automation('pg', { name: 'Other' })))
+await allow('a site admin lent elsewhere still keeps home automations', () =>
+  updateDoc(doc(as('pa'), ...autoOf('haifa'), 'a2'), { enabled: false, updatedAt: serverTimestamp(), updatedBy: 'pa' }))
+await deny('a member cannot write automations', () => setDoc(doc(w1, ...autoOf('haifa'), 'x1'), automation('w1')))
+await deny("another site's admin cannot either", () => setDoc(doc(as('pt'), ...autoOf('haifa'), 'x2'), automation('pt')))
+await deny('an automation with no keywords', () => setDoc(doc(wa, ...autoOf('haifa'), 'x3'), automation('wa', { keywords: [] })))
+await deny('more than 5 copies', () => setDoc(doc(wa, ...autoOf('haifa'), 'x4'), automation('wa', { fileCopies: 6 })))
+await deny('copies that are not a whole number', () => setDoc(doc(wa, ...autoOf('haifa'), 'x5'), automation('wa', { fileCopies: 1.5 })))
+await deny('more than 10 documents', () => setDoc(doc(wa, ...autoOf('haifa'), 'x6'), automation('wa', { documents: Array(11).fill({ file: 'a.pdf', copies: 1 }) })))
+await deny('a name over 80 characters', () => setDoc(doc(wa, ...autoOf('haifa'), 'x7'), automation('wa', { name: 'x'.repeat(81) })))
+await deny('forge who changed it', () => setDoc(doc(wa, ...autoOf('haifa'), 'x8'), automation('w1')))
+await deny('stamp it with a client clock', () =>
+  setDoc(doc(wa, ...autoOf('haifa'), 'x9'), automation('wa', { updatedAt: Timestamp.fromDate(new Date(2020, 0, 1)) })))
+await deny('smuggle an extra field', () => setDoc(doc(wa, ...autoOf('haifa'), 'x10'), automation('wa', { script: 'del C:\\' })))
+await deny('write under another feature', () => setDoc(doc(wa, 'sites', 'haifa', ...FQ, 'automations', 'x11'), automation('wa')))
+await allow('everyone at the site reads them', () => getDocs(collection(w1, ...autoOf('haifa'))))
+await allow('a visitor at the site reads them', () => getDocs(collection(as('wv'), ...autoOf('haifa'))))
+await deny('a worker at another site does not', () => getDocs(collection(as('wt'), ...autoOf('haifa'))))
+await deny('a stranger does not', () => getDocs(collection(as('stranger'), ...autoOf('haifa'))))
+await deny('a member cannot delete one', () => deleteDoc(doc(w1, ...autoOf('haifa'), 'a2')))
+await allow('a site admin deletes one', () => deleteDoc(doc(wa, ...autoOf('haifa'), 'a2')))
+
+// ---------------------------------------------------------------------------
 console.log('\n--- first-time setup on an empty database ---')
 await env.clearFirestore()
 const first = as('first')

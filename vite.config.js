@@ -5,8 +5,9 @@ import { defineConfig } from 'vite'
 // The lab-PC tools are published next to the app under fixed names: the
 // ServiceNow watcher, so the Install button can link to it and Tampermonkey
 // can check it for updates (a URL ending in .user.js is what makes
-// Tampermonkey offer to install it), and the relay, for the Download button.
-const TOOLS = ['servicenow-watcher.user.js', 'servicenow-relay.mjs']
+// Tampermonkey offer to install it), the relay, and the dispatch automation
+// agent with its starter, for the Download buttons.
+const TOOLS = ['servicenow-watcher.user.js', 'servicenow-relay.mjs', 'nblab-automation.ps1', 'nblab-automation.cmd']
 const toolSource = (name) => readFileSync(new URL(`./tools/${name}`, import.meta.url))
 
 const labTools = () => ({
