@@ -26,7 +26,7 @@ import { toSlug } from './queueOps'
 import { USERS } from './authService'
 import { DISPATCH_QUEUE, WORK_PROCESSES, DISPATCH_AUTOMATION } from './features'
 import { cleanSteps } from './processes'
-import { cleanAutomation, cleanAgentSettings } from './automation'
+import { cleanAutomation } from './automation'
 
 /**
  * Firestore data layer — everything is scoped to a site.
@@ -153,7 +153,8 @@ export const deleteSite = async (siteId, featureIds) => {
   jobs.docs.forEach(job => batch.delete(job.ref))
   processes.docs.forEach(process => batch.delete(process.ref))
   automations.docs.forEach(automation => batch.delete(automation.ref))
-  batch.delete(agentSettingsRef(db, siteId))
+  batch.delete(settingsRef(db, siteId, 'agent'))
+  batch.delete(settingsRef(db, siteId, 'automation'))
   batch.delete(doc(db, 'sites', siteId))
   await batch.commit()
 }
@@ -502,42 +503,34 @@ export const deleteProcess = (siteId, processId) =>
 // ---------------------------------------------------------------------------
 
 const automationsCollection = (db, siteId) => collection(db, ...featurePath(siteId, DISPATCH_AUTOMATION), 'automations')
+const settingsRef = (db, siteId, name) => doc(db, ...featurePath(siteId, DISPATCH_AUTOMATION), 'settings', name)
 
-/** A site's dispatch automations, live. */
-export const watchAutomations = (siteId, onChange, onError) => {
+/** The site's one automation (Grab & Go returns), live; null until an admin sets it up. */
+export const watchGrabAndGo = (siteId, onChange, onError) => {
   const db = getDb()
   if (!db || !siteId) return () => {}
   return onSnapshot(
-    automationsCollection(db, siteId),
-    (snapshot) => onChange(snapshot.docs.map(d => ({ id: d.id, ...d.data() }))),
+    settingsRef(db, siteId, 'automation'),
+    (snapshot) => onChange(snapshot.exists() ? snapshot.data({ serverTimestamps: 'estimate' }) : null),
     onError
   )
 }
 
-/** Create an automation (no id) or replace its content (with id). Returns the id. */
-export const saveAutomation = async (siteId, automationId, values, uid) => {
+export const saveGrabAndGo = (siteId, values, uid) =>
+  setDoc(settingsRef(requireDb(), siteId, 'automation'), { ...cleanAutomation(values), updatedBy: uid, updatedAt: serverTimestamp() })
+
+/**
+ * What the site had before there was one automation — separate automations
+ * and the lab-PC folder settings — to start the new one from.
+ */
+export const loadLegacyAutomation = async (siteId) => {
   const db = requireDb()
-  const data = { ...cleanAutomation(values), updatedBy: uid, updatedAt: serverTimestamp() }
-  if (automationId) {
-    await updateDoc(doc(automationsCollection(db, siteId), automationId), data)
-    return automationId
+  const [list, agent] = await Promise.all([
+    getDocs(automationsCollection(db, siteId)).catch(() => null),
+    getDoc(settingsRef(db, siteId, 'agent')).catch(() => null)
+  ])
+  return {
+    automations: list ? list.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => String(a.name).localeCompare(String(b.name))) : [],
+    agentSettings: agent?.exists() ? agent.data() : null
   }
-  const ref = doc(automationsCollection(db, siteId))
-  await setDoc(ref, { ...data, createdAt: serverTimestamp() })
-  return ref.id
 }
-
-export const deleteAutomation = (siteId, automationId) =>
-  deleteDoc(doc(automationsCollection(requireDb(), siteId), automationId))
-
-const agentSettingsRef = (db, siteId) => doc(db, ...featurePath(siteId, DISPATCH_AUTOMATION), 'settings', 'agent')
-
-/** The site's settings for the lab-PC agents, live; null until set. */
-export const watchAgentSettings = (siteId, onChange, onError) => {
-  const db = getDb()
-  if (!db || !siteId) return () => {}
-  return onSnapshot(agentSettingsRef(db, siteId), (snapshot) => onChange(snapshot.exists() ? snapshot.data() : null), onError)
-}
-
-export const saveAgentSettings = (siteId, values, uid) =>
-  setDoc(agentSettingsRef(requireDb(), siteId), { ...cleanAgentSettings(values), updatedBy: uid, updatedAt: serverTimestamp() })

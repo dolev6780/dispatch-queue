@@ -4,23 +4,23 @@ import { defineConfig, loadEnv } from 'vite'
 
 const tool = (name) => readFileSync(new URL(`./tools/${name}`, import.meta.url))
 
-// Where the published agent is; the agents on the lab PCs check it for a newer version.
-const AGENT_UPDATE_URL = 'https://dolev6780.github.io/dispatch-queue/nblab-automation.cmd'
+// Where the website is published: the agents on the lab PCs answer only it,
+// open its Automation page, and update themselves from its copy of the agent.
+const SITE_URL = 'https://dolev6780.github.io/dispatch-queue/'
 
 /**
  * The dispatch automation agent, as the one file people download:
  * nblab-automation.cmd. Its first lines are a Windows batch script that runs
  * the rest of the same file in PowerShell (inside <# #>, PowerShell skips
- * them); the rest is tools/nblab-automation.ps1 with the website's public
- * Firebase settings filled in, so the agent can sign in like the website,
- * and the address it updates itself from.
+ * them); the rest is tools/nblab-automation.ps1 with the website's address
+ * filled in (and its public Firebase key, which agents 2.2 look for before
+ * taking an update).
  * Batch files need Windows line endings.
  */
 export const agentCmd = (env) => {
   const script = tool('nblab-automation.ps1').toString('utf8')
+    .replace('__NBLAB_SITE_URL__', env.VITE_SITE_URL || SITE_URL)
     .replace('__NBLAB_FIREBASE_API_KEY__', env.VITE_FIREBASE_API_KEY || '')
-    .replace('__NBLAB_FIREBASE_PROJECT_ID__', env.VITE_FIREBASE_PROJECT_ID || '')
-    .replace('__NBLAB_UPDATE_URL__', env.VITE_AGENT_UPDATE_URL || AGENT_UPDATE_URL)
   const run = "& ([scriptblock]::Create([IO.File]::ReadAllText($env:NBLAB_SELF))) -Self $env:NBLAB_SELF -Test $env:NBLAB_TEST -Setup:($env:NBLAB_SETUP -eq '1')"
   // The agent itself is started with no console at all (CreateNoWindow):
   // "-WindowStyle Hidden" is ignored when Windows Terminal hosts consoles
@@ -31,8 +31,8 @@ export const agentCmd = (env) => {
   const starter = [
     '<# :',
     '@echo off',
-    'rem NBLAB dispatch automation agent. Double-click to start; the first time, a window asks for the settings.',
-    'rem Also: nblab-automation.cmd -Setup   or   nblab-automation.cmd -Test "C:\\path\\to\\file.pdf"',
+    'rem NBLAB dispatch automation agent. Double-click to start it; it runs next to the clock, with no window.',
+    'rem Set it up on the website (Automation page). Also: nblab-automation.cmd -Test "C:\\path\\to\\file.pdf"',
     'setlocal',
     'set "NBLAB_SELF=%~f0"',
     'set "NBLAB_TEST="',

@@ -1,7 +1,7 @@
 # Tests for nblab-automation.ps1, run with:
 #   npm run test:agent
-# (Windows PowerShell; the matching and field rules mirror
-# src/services/automation.test.mjs case for case.)
+# (Windows PowerShell. The website only cleans and saves the automation;
+# reading files, finding the return type and printing are tested here.)
 
 . "$PSScriptRoot\nblab-automation.ps1" -Library
 
@@ -32,15 +32,24 @@ try {
   Eq 'long values are cut' (Read-Field ("Note: " + ('x' * 200)) 'Note').Length 80
   Eq 'Windows line endings' (Read-Field "Ticket: RITM1`r`nNext: x" 'Ticket') 'RITM1'
 
-  Write-Host '--- matching (same cases as the website) ---'
-  $base = [pscustomobject]@{ name = 'Grab & Go return'; enabled = $true; keywords = @('Grab & Go', 'Return'); fileTypes = @() }
-  $off = [pscustomobject]@{ name = 'Off'; enabled = $false; keywords = @('Return'); fileTypes = @() }
-  $csv = [pscustomobject]@{ name = 'CSV only'; enabled = $true; keywords = @('Return'); fileTypes = @('csv') }
-  $all = @($off, $csv, $base)
-  Eq 'all keywords, any case: the first enabled match' (Find-Automation $text 'gg_return.pdf' $all).name 'Grab & Go return'
-  Eq 'a file type limit is honoured' (Find-Automation $text 'export.csv' $all).name 'CSV only'
-  Eq 'a missing keyword means no match' (Find-Automation 'Grab & Go pickup' 'a.pdf' $all) $null
-  Eq 'a disabled automation never matches' (Find-Automation 'Return' 'a.txt' @($off)) $null
+  Write-Host '--- return types (the automation from the website) ---'
+  $pushed = '{"keywords":[" Grab & Go "],"fileTypes":[".PDF","txt"],"types":[{"name":"PC refresh","keywords":["refresh"],"receipt":true,"receiptCopies":9,"documents":[],"sticker":true},{"name":"LDO","keywords":["LDO"],"receipt":true,"receiptCopies":1,"documents":[{"file":"LDO.pdf","copies":2},{"file":" "}],"sticker":false},{"name":"No words","keywords":[],"receipt":true},{"name":"Anything else","keywords":["x"]}],"other":{"receipt":true,"receiptCopies":1,"documents":[],"sticker":true},"stickerFields":[{"name":"Ticket","label":"Ticket"},{"name":"asset","label":"Asset tag"}],"stickerLines":["{type}","{ticket}","  ","Asset {asset}"],"watchFolder":"%USERPROFILE%\\GrabGo","filesFolder":"","autoPrint":true}' | ConvertFrom-Json
+  $auto = ConvertTo-AgentAutomation $pushed
+  Eq 'the Grab & Go words, trimmed' @($auto.keywords) @('Grab & Go')
+  Eq 'file types without dots, in lower case' @($auto.fileTypes) @('pdf', 'txt')
+  Eq 'a type without words, and a second "Anything else", are dropped' @($auto.types | ForEach-Object { $_.name }) @('PC refresh', 'LDO')
+  Eq 'copies kept within 1-5; empty forms dropped' @($auto.types[0].receiptCopies, @($auto.types[1].documents).Count) @(5, 1)
+  Eq 'detail names in lower case; empty sticker lines dropped' @($auto.stickerFields[0].name, @($auto.stickerLines).Count) @('ticket', 3)
+  Eq 'nothing handed over: nothing' (ConvertTo-AgentAutomation $null) $null
+  $refresh = "Grab & Go return`nType: PC REFRESH`nTicket: RITM1"
+  Eq 'the first type whose words are all in the file, any case' (Find-ReturnType $refresh 'a.pdf' $auto).type 'PC refresh'
+  Eq 'LDO' (Find-ReturnType "GRAB & GO`nLDO return" 'b.txt' $auto).type 'LDO'
+  Eq 'the first type wins when two match' (Find-ReturnType 'Grab & Go refresh LDO' 'f.pdf' $auto).type 'PC refresh'
+  Eq 'a Grab & Go file of no listed type: anything else' (Find-ReturnType 'Grab & Go laptop swap' 'c.pdf' $auto).type 'Anything else'
+  Eq 'without the Grab & Go words it is not a Grab & Go file' (Find-ReturnType 'PC refresh LDO' 'd.pdf' $auto).isGrabAndGo $false
+  Eq 'another kind of file is left alone' (Find-ReturnType $refresh 'e.docx' $auto).isGrabAndGo $false
+  Eq 'no automation yet: nothing is a Grab & Go file' (Find-ReturnType $refresh 'a.pdf' $null).isGrabAndGo $false
+  Eq 'an unknown type name prints as anything else' (Get-TypePrints $auto 'Nope').name 'Anything else'
 
   Write-Host '--- the sticker ---'
   $values = Read-Fields $text @([pscustomobject]@{ name = 'ticket'; label = 'Ticket' }, [pscustomobject]@{ name = 'asset'; label = 'Asset tag' })
@@ -49,6 +58,7 @@ try {
   Eq 'lines filled in' @(Format-Sticker @('{ticket}', 'Asset {asset}', '{date}') $values) @('RITM0012345', 'Asset NB-48213', '01/10/2026')
   Eq 'placeholders in any case' @(Format-Sticker @('{TICKET}') $values) @('RITM0012345')
   Eq 'an unknown placeholder is left empty' @(Format-Sticker @('[{nothing}]') $values) @('[]')
+  Eq 'the return type is a detail too' @(Format-Sticker @('{type}') $values) @('Grab & Go return')
 
   Write-Host '--- reading files ---'
   $txt = Join-Path $work 'return.txt'; [System.IO.File]::WriteAllText($txt, $text)
@@ -188,110 +198,156 @@ try {
     Write-Host '  (skipped printing: no "Microsoft Print to PDF" printer here)'
   }
 
-  Write-Host '--- the whole plan, dry run ---'
-  $files = Join-Path $work 'print files'
+  Write-Host '--- a return: planned, and printed (test run) ---'
+  $files = Join-Path $work 'forms'
   New-Item -ItemType Directory -Path $files | Out-Null
   [System.IO.File]::WriteAllText((Join-Path $files 'LDO.pdf'), '%PDF-1.4 placeholder')
-  $automations = @(ConvertTo-Automation ([pscustomobject]@{
-    name = 'Grab & Go return'; enabled = $true; keywords = @('Grab & Go', 'Return'); fileTypes = @()
-    printFile = $true; fileCopies = 1
-    documents = @([pscustomobject]@{ file = 'LDO.pdf'; copies = 2 }, [pscustomobject]@{ file = 'Missing.pdf'; copies = 1 })
-    sticker = $true; stickerLines = @('{ticket}', 'Asset {asset}')
-    stickerFields = @([pscustomobject]@{ name = 'ticket'; label = 'Ticket' }, [pscustomobject]@{ name = 'asset'; label = 'Asset tag' })
-  }) 'a1')
-  $config = @{ watchFolder = $work; filesFolder = $files; a4Printer = 'Office A4'; stickerPrinter = 'Label printer'; dryRun = $true }
-  $plan = Get-Plan $txt $config $automations
-  Eq 'the plan: the matching automation' $plan.automation.name 'Grab & Go return'
-  Eq 'the plan: the sticker lines' $plan.stickerLines @('RITM0012345', 'Asset NB-48213')
-  Eq 'the plan: files from the print-files folder' (@($plan.documents | ForEach-Object { $_.path })) @((Join-Path $files 'LDO.pdf'), (Join-Path $files 'Missing.pdf'))
+  $ret = Join-Path $work 'gg-return.txt'
+  [System.IO.File]::WriteAllText($ret, "Grab & Go return`nLDO`nTicket: RITM0012345`nAsset tag: NB-48213`n")
+  $settings = @{ watchFolder = $work; filesFolder = $files; a4Printer = 'Office A4'; stickerPrinter = 'Label printer'; autoPrint = $true; dryRun = $true; wanted = @{} }
+  $plan = Get-ReturnPlan $ret 'gg-return.txt' $auto $settings
+  Eq 'the plan: the type, from the file' @($plan.isGrabAndGo, $plan.detected, $plan.type) @($true, 'LDO', 'LDO')
+  Eq 'the plan: what LDO prints' @($plan.receipt.copies, $plan.documents[0].file, $plan.documents[0].copies, $plan.documents[0].found, $plan.sticker) @(1, 'LDO.pdf', 2, $true, $false)
+  Eq 'the plan: sticker lines, with the type' @($plan.stickerLines) @('LDO', 'RITM0012345', 'Asset NB-48213')
+  $asRefresh = Get-ReturnPlan $ret 'gg-return.txt' $auto $settings 'PC refresh'
+  Eq 'another type, chosen on the website' @($asRefresh.detected, $asRefresh.type, $asRefresh.sticker, @($asRefresh.documents).Count, $asRefresh.stickerLines[0]) @('LDO', 'PC refresh', $true, 0, 'PC refresh')
   $script:LogPath = Join-Path $work 'test.log'
-  Invoke-Automation $txt $config $automations
+  $result = Invoke-Prints $plan 'all' '' $null $settings
+  Eq 'print all: the receipt and each form' @($result.done) @('receipt', 'LDO.pdf')
+  Eq '...a test run says so' $result.dryRun $true
   $log = Get-Content $script:LogPath -Raw
-  Eq 'a dry run logs the file it would print, on the A4 printer' ($log -match "would print .*return\.txt on 'Office A4'") $true
-  Eq 'a dry run logs each copy of a file to print' ([regex]::Matches($log, "would print .*LDO\.pdf on 'Office A4'").Count) 2
-  Eq 'a dry run logs the sticker' ($log -match "sticker on 'Label printer': RITM0012345 \| Asset NB-48213") $true
-  Eq 'a missing file to print is reported, not fatal' ($log -match 'PROBLEM: Missing\.pdf is not in') $true
-  Eq 'a file that matches nothing is only logged' ((Get-Plan $csvFile $config $automations).automation) $null
-  Remove-Item -LiteralPath $script:LogPath
-  Invoke-Automation $txt @{ watchFolder = $work; filesFolder = $files; a4Printer = ''; stickerPrinter = ''; dryRun = $true } $automations
-  $log = Get-Content $script:LogPath -Raw
-  Eq 'no A4 printer chosen: said once, nothing printed on paper' ([regex]::Matches($log, 'PROBLEM: no A4 printer is chosen on this PC').Count) 1
-  Eq 'no sticker printer chosen: said too' ($log -match 'PROBLEM: no sticker printer is chosen on this PC') $true
+  Eq '...every copy of a form, on the A4 printer' ([regex]::Matches($log, "would print .*LDO\.pdf on 'Office A4'").Count) 2
+  Eq 'just the sticker, whatever the type prints' @((Invoke-Prints $plan 'sticker' '' $null $settings).done) @('sticker')
+  [void](Invoke-Prints $plan 'sticker' '' @('Edited', 'line') $settings)
+  Eq '...or with its lines changed on the website' ((Get-Content $script:LogPath -Raw) -match "sticker on 'Label printer': Edited \| line") $true
+  Eq 'just the receipt' @((Invoke-Prints $plan 'receipt' '' $null $settings).done) @('receipt')
+  Eq 'just one form' @((Invoke-Prints $plan 'document' 'LDO.pdf' $null $settings).done) @('LDO.pdf')
+  Eq 'a blank form, with no file at all' @((Invoke-Prints $null 'document' 'LDO.pdf' $null $settings).done) @('LDO.pdf')
+  Eq 'a form missing from the folder is said, not fatal' @((Invoke-Prints $null 'document' 'Nope.pdf' $null $settings).problems) @("Nope.pdf is not in $files")
+  Eq 'a path is never a form' @((Invoke-Prints $null 'document' '..\secret.pdf' $null $settings).problems) @('that is not a form name')
+  $noPrinters = $settings.Clone()
+  $noPrinters.a4Printer = ''
+  $noPrinters.stickerPrinter = ''
+  $r = Invoke-Prints $asRefresh 'all' '' $null $noPrinters
+  Eq 'no printers chosen: said once each, nothing printed' @(@($r.done).Count, @($r.problems).Count) @(0, 2)
 
-  Write-Host '--- automations read from the website ---'
-  $rest = '{"name":"projects/p/databases/(default)/documents/sites/l12/features/dispatch-automation/automations/a7","fields":{"name":{"stringValue":"Return"},"enabled":{"booleanValue":true},"keywords":{"arrayValue":{"values":[{"stringValue":"Grab & Go"}]}},"fileTypes":{"arrayValue":{}},"printFile":{"booleanValue":false},"fileCopies":{"integerValue":"9"},"documents":{"arrayValue":{"values":[{"mapValue":{"fields":{"file":{"stringValue":"LDO.pdf"},"copies":{"integerValue":"2"}}}}]}},"sticker":{"booleanValue":true},"stickerLines":{"arrayValue":{"values":[{"stringValue":"{ticket}"}]}},"stickerFields":{"arrayValue":{"values":[{"mapValue":{"fields":{"name":{"stringValue":"ticket"},"label":{"stringValue":"Ticket"}}}}]}},"updatedAt":{"timestampValue":"2026-10-01T09:00:00.123456Z"}}}' | ConvertFrom-Json
-  $fromWeb = ConvertTo-Automation (ConvertFrom-FirestoreFields $rest.fields) 'a7'
-  Eq 'a website automation: name and words' @($fromWeb.name, $fromWeb.keywords) @('Return', @('Grab & Go'))
-  Eq 'a website automation: an empty list stays empty' $fromWeb.fileTypes.Count 0
-  Eq 'a website automation: copies kept within 1-5' $fromWeb.fileCopies 5
-  Eq 'a website automation: files to print' @($fromWeb.documents[0].file, $fromWeb.documents[0].copies) @('LDO.pdf', 2)
-  Eq 'a website automation: sticker details' @($fromWeb.stickerFields[0].name, $fromWeb.stickerFields[0].label) @('ticket', 'Ticket')
-  Eq 'a website automation: it works with the matching rules' (Find-Automation 'GRAB & GO return' 'a.pdf' @($fromWeb)).id 'a7'
-  Eq 'a missing field gets its default' (ConvertTo-Automation ([pscustomobject]@{ name = 'Bare' }) 'b').enabled $true
-  $me = ConvertFrom-FirestoreFields (('{"siteId":{"stringValue":"l12"},"tempSiteId":{"stringValue":"l9"},"tempEndsAt":{"timestampValue":"2026-10-05T00:00:00Z"}}') | ConvertFrom-Json)
-  Eq 'the current site: away on a temporary move' (Get-CurrentSite $me ([datetime]'2026-10-01T10:00:00Z')) 'l9'
-  Eq 'the current site: home again once it ends' (Get-CurrentSite $me ([datetime]'2026-10-06T10:00:00Z')) 'l12'
+  Write-Host '--- files arriving ---'
+  $script:Config = @{ a4Printer = 'Office A4'; stickerPrinter = 'Label printer'; automation = $auto; revision = [long]1; siteId = 'l12'; siteName = 'L12'; isNew = $false }
+  $script:Settings = $settings
+  $script:Recent.Clear()
+  Invoke-Arrival $ret
+  Eq 'a Grab & Go file is printed by itself, and listed' @($script:Recent[0].name, $script:Recent[0].type, $script:Recent[0].status) @('gg-return.txt', 'LDO', 'printed')
+  $holiday = Join-Path $work 'holiday.txt'
+  [System.IO.File]::WriteAllText($holiday, 'Holiday photos')
+  Invoke-Arrival $holiday
+  Eq 'any other file is left alone' $script:Recent.Count 1
+  $settings.autoPrint = $false
+  Invoke-Arrival $ret
+  Eq 'automatic printing off: kept for the website, not printed' $script:Recent[0].status 'waiting'
+  $settings.autoPrint = $true
+  $script:Config.automation = $null
+  Invoke-Arrival $ret
+  Eq 'not set up yet: nothing happens' $script:Recent.Count 2
+  $script:Config.automation = $auto
 
-  Write-Host "--- the site's Lab PC settings ---"
-  $siteRest = '{"name":"projects/p/databases/(default)/documents/sites/l12/features/dispatch-automation/settings/agent","fields":{"watchFolder":{"stringValue":"%USERPROFILE%\\GrabGo"},"filesFolder":{"stringValue":"\\\\lab-server\\print"},"stickerPrinter":{"stringValue":"ZDesigner ZD421"},"dryRun":{"booleanValue":true},"updatedBy":{"stringValue":"u1"},"updatedAt":{"timestampValue":"2026-10-01T09:00:00Z"}}}' | ConvertFrom-Json
-  $site = ConvertTo-SiteSettings (ConvertFrom-FirestoreFields $siteRest.fields)
-  Eq 'the site settings from the website' @($site.watchFolder, $site.filesFolder, $site.dryRun) @('%USERPROFILE%\GrabGo', '\\lab-server\print', $true)
-  Eq '...never a printer: each PC chooses its own' $site.ContainsKey('stickerPrinter') $false
-  Eq 'none set on the website yet' (ConvertTo-SiteSettings $null) $null
-  Eq 'a missing document, in words' (Get-FirebaseErrorMessage '{"error":{"code":404,"message":"Document x was not found.","status":"NOT_FOUND"}}') 'Not found.'
-  $defaults = Get-DefaultFolders
-  $blank = @{ watchFolder = ''; filesFolder = ''; a4Printer = ''; stickerPrinter = ''; dryRun = $false }
-  $none = Get-EffectiveSettings $blank $null
-  Eq 'nothing set anywhere: the default folders, no printers yet' @($none.watchFolder, $none.filesFolder, $none.a4Printer, $none.stickerPrinter, $none.dryRun) @($defaults.watchFolder, $defaults.filesFolder, '', '', $false)
-  $fromSite = Get-EffectiveSettings $blank $site
-  Eq "the site's settings, %USERPROFILE% as this user's folder" @($fromSite.watchFolder, $fromSite.filesFolder, $fromSite.dryRun) @((Join-Path $env:USERPROFILE 'GrabGo'), '\\lab-server\print', $true)
-  Eq '...and where each one came from' @($fromSite.from.watchFolder, $fromSite.from.filesFolder, $fromSite.from.dryRun) @('the site', 'the site', 'the site')
-  $own = Get-EffectiveSettings @{ watchFolder = 'D:\In'; filesFolder = ''; a4Printer = 'HP A4'; stickerPrinter = 'Brother QL'; dryRun = $false } $site
-  Eq "this PC's own folder and its two printers, the rest from the site" @($own.watchFolder, $own.filesFolder, $own.a4Printer, $own.stickerPrinter, $own.from.watchFolder) @('D:\In', '\\lab-server\print', 'HP A4', 'Brother QL', 'this PC')
-  Eq 'test mode: on when this PC turns it on' (Get-EffectiveSettings @{ dryRun = $true } $null).dryRun $true
-  Eq 'test mode: on when the site turns it on' (Get-EffectiveSettings $blank @{ dryRun = $true }).dryRun $true
-  Eq 'the printers in words' @((Format-EffectiveSettings $own)[2], (Format-EffectiveSettings $own)[3], (Format-EffectiveSettings $none)[2]) @('A4 printer: HP A4', 'Sticker printer: Brother QL', 'A4 printer: (not chosen)')
-  $script:LogPath = Join-Path $work 'test.log'
+  Write-Host "--- this PC's settings ---"
+  $DataFolder = Join-Path $work 'agent-data'
+  $ConfigPath = Join-Path $DataFolder 'config.json'
+  $UploadFolder = Join-Path $DataFolder 'uploads'
+  New-Item -ItemType Directory -Path $DataFolder | Out-Null
+  Eq 'the first time: nothing set, and it knows it is new' (Get-AgentConfig).isNew $true
+  @{ a4Printer = 'HP A4'; stickerPrinter = 'Zebra'; refreshToken = 'secret'; email = 'a@nblab.local' } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $DataFolder 'settings.json')
+  [System.IO.File]::WriteAllText((Join-Path $DataFolder 'automations-cache.json'), '{}')
+  $migrated = Get-AgentConfig
+  Eq 'from 2.x: the printers are kept' @($migrated.a4Printer, $migrated.stickerPrinter) @('HP A4', 'Zebra')
+  Eq '...the old sign-in and copy are gone' @((Test-Path (Join-Path $DataFolder 'settings.json')), (Test-Path (Join-Path $DataFolder 'automations-cache.json')), (Test-Path $ConfigPath)) @($false, $false, $true)
+  $somePrinter = (Get-InstalledPrinters)[0]
+  Set-AgentSetup $migrated (@{ printers = @{ a4Printer = $somePrinter; stickerPrinter = $somePrinter } } | ConvertTo-Json | ConvertFrom-Json)
+  Eq "the website chooses this PC's printers" @($migrated.a4Printer, $migrated.stickerPrinter) @($somePrinter, $somePrinter)
+  $answer = try { Set-AgentSetup $migrated (@{ printers = @{ a4Printer = 'No Such Printer 123'; stickerPrinter = '' } } | ConvertTo-Json | ConvertFrom-Json); 'saved?!' } catch { $_.Exception.Message }
+  Eq '...only a printer this PC has' $answer "There is no printer named 'No Such Printer 123' on this PC."
+  Set-AgentSetup $migrated (@{ automation = $pushed; revision = 1717; site = @{ id = 'l12'; name = 'L12' } } | ConvertTo-Json -Depth 8 | ConvertFrom-Json)
+  $again = Get-AgentConfig
+  Eq "the site's automation is kept on this PC, with its revision" @($again.revision, $again.siteName, @($again.automation.types).Count, $again.a4Printer) @(1717, 'L12', 2, $somePrinter)
+  Eq '...and works the same after a restart' (Find-ReturnType $refresh 'a.pdf' $again.automation).type 'PC refresh'
+  $effective = Get-AgentSettings $again
+  Eq "its folders are this user's own" @($effective.watchFolder, $effective.filesFolder) @((Join-Path $env:USERPROFILE 'GrabGo'), (Get-DefaultFolders).filesFolder)
+  Eq '...and it prints by itself' $effective.autoPrint $true
   $made = @{ watchFolder = (Join-Path $work 'from-site\grab-go'); wanted = @{} }
   Resolve-AgentFolder $made 'watchFolder'
-  Eq "a site folder missing on this PC is made" (Test-Path -LiteralPath $made.watchFolder -PathType Container) $true
-  $bad = @{ watchFolder = 'C:\bad<name>'; wanted = @{} }
+  Eq 'a folder missing on this PC is made' (Test-Path -LiteralPath $made.watchFolder -PathType Container) $true
+  $bad = @{ watchFolder = 'C:' + [char]92 + 'bad<name>'; wanted = @{} }
   Resolve-AgentFolder $bad 'watchFolder'
-  Eq 'a folder that cannot be used falls back to the default' $bad.watchFolder $defaults.watchFolder
-  Eq '...remembering what was asked for, to not warn again' $bad.wanted.watchFolder 'C:\bad<name>'
-  $saved = @{ site = 'l12'; person = 'Dana'; automations = @($fromWeb); settings = $site } | ConvertTo-Json -Depth 8 | ConvertFrom-Json
-  $again = ConvertFrom-SavedAutomations $saved 'saved copy'
-  Eq 'the saved copy keeps the automations and the site settings' @($again.site, $again.automations[0].id, $again.settings.filesFolder, $again.settings.dryRun) @('l12', 'a7', '\\lab-server\print', $true)
-  $ConfigPath = Join-Path $work 'settings.json'
-  @{ watchFolder = $defaults.watchFolder; filesFolder = 'E:\Forms'; stickerPrinter = 'Zebra'; dryRun = $false; startAtSignIn = $true; email = 'a@nblab.local'; refreshToken = 'x' } |
-    ConvertTo-Json | Set-Content -LiteralPath $ConfigPath -Encoding UTF8
-  $migrated = Get-AgentConfig
-  Eq 'a PC set up before 2.2 with the default folder now follows the site' @($migrated.watchFolder, $migrated.filesFolder) @('', 'E:\Forms')
-  Eq '...keeps its sticker printer, and still has to choose the A4 printer' @($migrated.stickerPrinter, $migrated.a4Printer) @('Zebra', '')
+  Eq 'a folder that cannot be used falls back to the default' $bad.watchFolder (Get-DefaultFolders).watchFolder
 
-  Write-Host '--- signing in (the same as the website) ---'
-  Eq 'the credentials match the website' (Get-WorkIdCredentials '4471') @{ email = '4471@nblab.local'; password = '7151242b4b3ae3938e73ec7cc7e658c5' }
-  Eq '...trimmed and in any case' (Get-WorkIdCredentials ' ab12.x ').password '54b292074947116eb84c3d2b61ddafee'
-  Eq 'a work ID is needed' (Test-WorkId '  ') 'Enter your work ID.'
-  Eq 'too short' (Test-WorkId '12') 'The work ID must be at least 3 characters.'
-  Eq 'odd characters' (Test-WorkId 'a b') 'Use only letters, numbers, dots, dashes or underscores.'
-  Eq 'a good work ID' (Test-WorkId 'ab12.x') $null
-  Eq 'a wrong work ID, in words' (Get-FirebaseErrorMessage '{"error":{"message":"INVALID_LOGIN_CREDENTIALS"}}') 'That work ID was not recognised.'
-  Eq 'an expired sign-in, in words' (Get-FirebaseErrorMessage '{"error":{"message":"TOKEN_EXPIRED"}}') 'The sign-in on this PC has expired. Open the settings and enter the work ID again.'
-  Eq 'no answer at all' (Get-FirebaseErrorMessage '') 'No connection to the server.'
-  Eq 'the sign-in is kept encrypted, for this user only' (Unprotect-Text (Protect-Text 'refresh-123')) 'refresh-123'
-  Eq '...and is not readable as stored' ((Protect-Text 'refresh-123') -match 'refresh') $false
-
-  # The real sign-in service, with a work ID that does not exist: proves the
-  # address, TLS and the error message - using the key from .env.local.
-  $envFile = Join-Path $PSScriptRoot '..\.env.local'
-  $keyLine = if (Test-Path $envFile) { Get-Content $envFile | Where-Object { $_ -match '^VITE_FIREBASE_API_KEY=' } | Select-Object -First 1 } else { $null }
-  if ($keyLine) {
-    $FirebaseApiKey = ($keyLine -split '=', 2)[1].Trim().Trim('"')
-    $answer = try { Invoke-FirebaseSignIn 'ZZTEST000NOTREAL' | Out-Null; 'signed in?!' } catch { $_.Exception.Message }
-    Eq 'the real sign-in service refuses an unknown work ID, in words' $answer 'That work ID was not recognised.'
-  } else {
-    Write-Host '  (skipped the live sign-in check: no .env.local)'
+  Write-Host '--- the website on this PC (127.0.0.1) ---'
+  Add-Type -AssemblyName System.Net.Http
+  $probe = New-Object System.Net.Sockets.TcpListener([System.Net.IPAddress]::Loopback, 0)
+  $probe.Start()
+  $port = $probe.LocalEndpoint.Port
+  $probe.Stop()
+  $server = Start-LocalServer $port
+  $http = New-Object System.Net.Http.HttpClient
+  $http.DefaultRequestHeaders.ExpectContinue = $false
+  $ask = {
+    param([string]$Method, [string]$Path, [string]$Origin = 'http://localhost:5173', $Body = $null, [string]$Type = 'application/json', [hashtable]$Headers = @{})
+    $message = New-Object System.Net.Http.HttpRequestMessage((New-Object System.Net.Http.HttpMethod $Method), "http://127.0.0.1:$port$Path")
+    if ($Origin) { [void]$message.Headers.TryAddWithoutValidation('Origin', $Origin) }
+    foreach ($key in $Headers.Keys) { [void]$message.Headers.TryAddWithoutValidation($key, $Headers[$key]) }
+    if ($null -ne $Body) {
+      $content = if ($Body -is [byte[]]) { New-Object System.Net.Http.ByteArrayContent(, $Body) } else { New-Object System.Net.Http.StringContent([string]$Body, [System.Text.Encoding]::UTF8) }
+      $content.Headers.ContentType = New-Object System.Net.Http.Headers.MediaTypeHeaderValue($Type)
+      $message.Content = $content
+    }
+    $task = $http.SendAsync($message)
+    $deadline = (Get-Date).AddSeconds(30)
+    while (-not $task.IsCompleted -and (Get-Date) -lt $deadline) {
+      if ($server.Pending()) { $null = Invoke-LocalRequest ($server.AcceptTcpClient()) } else { Start-Sleep -Milliseconds 20 }
+    }
+    $response = $task.Result
+    $text = $response.Content.ReadAsStringAsync().Result
+    $header = { param($name) $values = $null; if ($response.Headers.TryGetValues($name, [ref]$values)) { [string]@($values)[0] } else { '' } }
+    @{
+      status = [int]$response.StatusCode
+      origin = (& $header 'Access-Control-Allow-Origin')
+      privateNetwork = (& $header 'Access-Control-Allow-Private-Network')
+      json = $(if ($text) { try { $text | ConvertFrom-Json } catch { $null } } else { $null })
+    }
+  }
+  try {
+    $script:Config = $again
+    $script:Settings = $settings
+    $script:Recent.Clear()
+    $r = & $ask 'OPTIONS' '/status' 'http://localhost:5173' $null 'application/json' @{ 'Access-Control-Request-Private-Network' = 'true' }
+    Eq "Chrome's check first: allowed, for this website, private network too" @($r.status, $r.origin, $r.privateNetwork) @(204, 'http://localhost:5173', 'true')
+    $r = & $ask 'GET' '/status'
+    Eq 'who it is' @($r.status, $r.json.app, $r.json.version) @(200, 'nblab-automation', $AgentVersion)
+    Eq "this PC's printers, and the chosen ones" @((@($r.json.printers) -contains $somePrinter), $r.json.a4Printer) @($true, $somePrinter)
+    Eq 'the forms found in the folder, and the automation it has' @((@($r.json.documents) -contains 'LDO.pdf'), $r.json.automationRevision, $r.json.site.name) @($true, 1717, 'L12')
+    $r = & $ask 'GET' '/status' 'https://evil.example'
+    Eq 'another website is turned away, without a CORS answer' @($r.status, $r.origin) @(403, '')
+    Eq 'no website at all is turned away too' (& $ask 'GET' '/status' '').status 403
+    Eq 'the published website is let in' (& $ask 'GET' '/status' 'https://dolev6780.github.io').status $(if ($SiteOrigin -eq 'https://dolev6780.github.io') { 200 } else { 403 })
+    $r = & $ask 'POST' '/read?name=gg-return.txt' 'http://localhost:5173' ([System.IO.File]::ReadAllBytes($ret)) 'application/octet-stream'
+    Eq 'an uploaded file: read, its type found' @($r.status, $r.json.name, $r.json.detected, $r.json.type) @(200, 'gg-return.txt', 'LDO', 'LDO')
+    Eq '...what it prints, and its details' @($r.json.documents[0].file, $r.json.documents[0].found, $r.json.values.ticket) @('LDO.pdf', $true, 'RITM0012345')
+    $id = $r.json.id
+    $r = & $ask 'GET' "/plan?id=$id&type=PC%20refresh"
+    Eq 'the same file as another type' @($r.json.type, $r.json.sticker, $r.json.stickerLines[0]) @('PC refresh', $true, 'PC refresh')
+    $r = & $ask 'POST' '/print' 'http://localhost:5173' (@{ id = $id; type = 'PC refresh'; what = 'all' } | ConvertTo-Json)
+    Eq 'print all for that type' @($r.status, @($r.json.done), $r.json.dryRun) @(200, @('receipt', 'sticker'), $true)
+    Eq '...and the file is listed as printed' @((& $ask 'GET' '/status').json.recent[0].status) @('printed')
+    $r = & $ask 'POST' '/print' 'http://localhost:5173' (@{ what = 'document'; file = 'LDO.pdf' } | ConvertTo-Json)
+    Eq 'a blank form' @(@($r.json.done)) @('LDO.pdf')
+    Eq 'print all needs a file' (& $ask 'POST' '/print' 'http://localhost:5173' '{"what":"all"}').json.error 'Which file?'
+    Eq 'a file that is gone' (& $ask 'POST' '/print' 'http://localhost:5173' '{"what":"all","id":"f0-0"}').status 404
+    Eq 'not JSON' (& $ask 'POST' '/print' 'http://localhost:5173' 'print!').status 400
+    $r = & $ask 'POST' '/setup' 'http://localhost:5173' '{"printers":{"a4Printer":"No Such Printer 123","stickerPrinter":""}}'
+    Eq 'a printer this PC does not have, in words' @($r.status, $r.json.error) @(500, "There is no printer named 'No Such Printer 123' on this PC.")
+    Eq 'anything else: not here' (& $ask 'GET' '/nothing').status 404
+  } finally {
+    $server.Stop()
+    $http.Dispose()
   }
 
   Write-Host '--- starting with Windows ---'
@@ -305,26 +361,6 @@ try {
   Set-StartAtSignIn $false $link
   Eq 'turning it off removes the shortcut' (Test-Path -LiteralPath $link) $false
 
-  Write-Host '--- the setup window ---'
-  $installed = @([System.Drawing.Printing.PrinterSettings]::InstalledPrinters)
-  $somePrinter = $installed[0]
-  $form = New-SetupForm @{ watchFolder = 'C:\In'; filesFolder = 'C:\Print'; a4Printer = $somePrinter; stickerPrinter = 'Not a printer'; startAtSignIn = $false; email = '4471@nblab.local'; refreshToken = 'x'; dryRun = $false }
-  Eq 'it shows the saved folders' @($form.controls.watchFolder.Text, $form.controls.filesFolder.Text) @('C:\In', 'C:\Print')
-  Eq 'both printers are chosen from the printers in Windows' @($form.controls.a4Printer.Items.Count, $form.controls.stickerPrinter.Items.Count) @(($installed.Count + 1), ($installed.Count + 1))
-  Eq 'it shows the saved A4 printer' ([string]$form.controls.a4Printer.SelectedItem) $somePrinter
-  Eq 'a sticker printer no longer on this PC is to be chosen again' ([string]$form.controls.stickerPrinter.SelectedItem) '(choose a printer)'
-  Eq 'it says who is signed in' ($form.controls.signedIn.Text -match '^Signed in as 4471') $true
-  Eq 'the work ID box hides what is typed' $form.controls.workId.UseSystemPasswordChar $true
-  $form.form.Dispose()
-  $form = New-SetupForm @{ watchFolder = ''; filesFolder = ''; a4Printer = ''; stickerPrinter = ''; startAtSignIn = $true; email = ''; refreshToken = ''; dryRun = $false } $site
-  Eq "empty folders: it says they follow the site's" @($form.controls.watchFolder.Text, $form.controls.watchFolderHint.Text) @('', "Empty: the site's - $(Join-Path $env:USERPROFILE 'GrabGo')")
-  $form.form.Dispose()
-  $form = New-SetupForm $null $null
-  Eq 'the first time: empty, falling back to Downloads' @($form.controls.watchFolder.Text, ($form.controls.watchFolderHint.Text -like '*else*Downloads')) @('', $true)
-  Eq '...the A4 printer suggested: the Windows default' ([string]$form.controls.a4Printer.SelectedItem) (Get-DefaultPrinter)
-  Eq '...the sticker printer still to be chosen' $form.controls.stickerPrinter.SelectedIndex 0
-  $form.form.Dispose()
-
   Write-Host '--- updating itself ---'
   Eq 'not built for the website: no update check' (Get-AgentUpdate) $null
   $node = Get-Command node -ErrorAction SilentlyContinue
@@ -332,12 +368,13 @@ try {
     # The agent exactly as the website publishes it (vite.config.js).
     $builder = Join-Path $work 'build.mjs'
     $viteConfig = ([uri](Resolve-Path (Join-Path $PSScriptRoot '..\vite.config.js')).Path).AbsoluteUri
-    [System.IO.File]::WriteAllText($builder, "import { agentCmd } from '$viteConfig'`nimport { writeFileSync } from 'node:fs'`nwriteFileSync(process.argv[2], agentCmd({ VITE_FIREBASE_API_KEY: 'AIzaTestKey0123456789', VITE_FIREBASE_PROJECT_ID: 'demo-nblab', VITE_AGENT_UPDATE_URL: 'https://example.invalid/nblab-automation.cmd' }))`n")
+    [System.IO.File]::WriteAllText($builder, "import { agentCmd } from '$viteConfig'`nimport { writeFileSync } from 'node:fs'`nwriteFileSync(process.argv[2], agentCmd({ VITE_FIREBASE_API_KEY: 'AIzaTestKey0123456789', VITE_SITE_URL: 'https://example.invalid/nblab/' }))`n")
     $built = Join-Path $work 'built.cmd'
     & $node.Source $builder $built
     $builtText = [System.IO.File]::ReadAllText($built)
     Eq 'the published agent carries its version' ([string](Get-ScriptVersion $builtText)) $AgentVersion
-    Eq '...knows where to update from' ([regex]::Match($builtText, "(?m)^\`$UpdateUrl = '([^']*)'").Groups[1].Value) 'https://example.invalid/nblab-automation.cmd'
+    Eq '...knows the website it answers and updates from' ([regex]::Match($builtText, "(?m)^\`$SiteUrl = '([^']*)'").Groups[1].Value) 'https://example.invalid/nblab/'
+    Eq '...and agents 2.2 take it as an update' ([regex]::IsMatch($builtText, '(?m)^\$FirebaseApiKey = ''(?!__)[A-Za-z0-9_\-]{10,}''')) $true
     Eq '...and passes the check' (Test-AgentScript $builtText) ''
     Eq 'a web page is not the agent' (Test-AgentScript ('<!doctype html><html>' + ('x' * 30000))) 'not the agent'
     $cut = $builtText.Substring(0, $builtText.IndexOf('while (-not $script:Stop)') + 40)

@@ -211,20 +211,20 @@ export const SettingsPage = ({
           <div className="tool-text">
             <span className="module-name">Dispatch automation agent</span>
             <span className="module-desc">
-              On every lab PC that handles Grab &amp; Go returns: listens to a folder, reads each new file, and prints
-              what its automation on the Automation page says. One file, nothing to install, and nothing leaves the PC.
+              On every lab PC that handles Grab &amp; Go returns. It only listens — to the folder the files arrive in, and
+              to this website on the same PC — and prints. Everything else is on the Automation page. One file, nothing to
+              install, and nothing leaves the PC.
             </span>
             <ol className="tool-steps">
-              <li>Press <strong>Download</strong> and double-click <code>nblab-automation.cmd</code>.</li>
-              <li>In the window, enter your <strong>work ID</strong> and choose this PC&apos;s two printers from its Windows printers: the <strong>A4 printer</strong> and the <strong>sticker printer</strong>. Press <em>Save and start</em>. The folders come from <strong>Automation → Lab PC settings</strong>; fill them in only for a PC that needs its own.</li>
-              <li>Put the files to print (like <code>LDO.pdf</code>) in the files folder, named as in the automations.</li>
+              <li>Press <strong>Download</strong> and double-click <code>nblab-automation.cmd</code>. No window opens: it runs next to the clock and starts with Windows.</li>
+              <li>Open <strong>Automation</strong> on this PC. If Chrome asks whether this site may look for devices on this PC, choose <strong>Allow</strong>. Choose this PC&apos;s <strong>A4 printer</strong> and <strong>sticker printer</strong>.</li>
+              <li>Put the forms (like <code>LDO.pdf</code>) in the files folder, named as in the automation.</li>
             </ol>
             <span className="tool-note">
-              It then runs out of sight next to the clock, starts with Windows, and updates itself when a new version is
-              published here. Changes on the Automation page — automations and Lab PC settings — reach it within minutes.
-              Right-click its icon for the settings, the log, or <em>Check for updates</em>. Try a file without printing:
-              <code>nblab-automation.cmd -Test "C:\path\to\file.pdf"</code>. PDFs, pictures and text files print by Windows itself — no
-              PDF app needed; Word and Excel files print through Office. If company policy blocks scripts, IT has to allow it.
+              It updates itself when a new version is published here, and takes changes to the automation within a minute
+              while the website is open on the PC. Right-click its icon for the log or <em>Check for updates</em>. PDFs,
+              pictures and text files print by Windows itself — no PDF app needed; Word and Excel files print through Office.
+              If company policy blocks scripts, IT has to allow it.
             </span>
           </div>
           <a className="btn btn-dark tool-install" href={AGENT_URL} download="nblab-automation.cmd">

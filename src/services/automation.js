@@ -1,19 +1,24 @@
 /**
  * Dispatch automation — pure definitions and logic (no React, no Firebase).
  *
- * An automation says: when a file arrives on a lab PC whose CONTENT holds all
- * these keywords, print the file itself, these documents, and a sticker whose
- * lines are filled with details read from the file. The automation agent on
- * each PC (tools/nblab-automation.ps1) reads them from the website and does
- * the work; matchAutomation, readFields and fillSticker here are its rules,
- * mirrored so the website can try them on pasted text. Keep the two in step.
+ * A site has ONE automation, for Grab & Go returns. A file is a Grab & Go
+ * file when its CONTENT holds all the automation's words; then its return
+ * type is the first type whose words are all in it — PC refresh, LDO, … — or
+ * "anything else". Each type says what to print: the receipt (the downloaded
+ * file itself), forms from the PC's files-to-print folder, and a sticker whose
+ * lines are filled with details read from the file.
+ *
+ * The website saves it and hands it to the agent on each lab PC
+ * (tools/nblab-automation.ps1), which listens to the folder and prints; the
+ * matching and reading rules live there, with their tests.
  */
 
 export const LIMITS = {
-  name: 80,
   keywords: 10,
   keyword: 60,
   fileTypes: 10,
+  types: 8,
+  typeName: 40,
   documents: 10,
   file: 120,
   copies: 5,
@@ -21,25 +26,36 @@ export const LIMITS = {
   stickerLine: 80,
   stickerFields: 10,
   label: 60,
-  notes: 1000,
-  value: 80
+  folder: 260
 }
 
-/** Always available on a sticker, whatever the file holds. */
-export const BUILTIN_FIELDS = ['file', 'date', 'time', 'automation']
+/** The type a Grab & Go file gets when no other type's words are in it. */
+export const OTHER_TYPE = 'Anything else'
 
-export const emptyAutomation = () => ({
-  name: '',
-  enabled: true,
-  keywords: [],
+/** Always available on a sticker, whatever the file holds. */
+export const BUILTIN_FIELDS = ['type', 'file', 'date', 'time']
+
+/** What a type prints: the receipt (the downloaded file), forms, a sticker. */
+export const noPrints = () => ({ receipt: false, receiptCopies: 1, documents: [], sticker: false })
+
+/** Where a new site starts: the three kinds of return, printing what they usually need. */
+export const defaultAutomation = () => ({
+  keywords: ['Grab & Go'],
   fileTypes: [],
-  printFile: true,
-  fileCopies: 1,
-  documents: [],
-  sticker: false,
-  stickerLines: [],
-  stickerFields: [],
-  notes: ''
+  types: [
+    { name: 'PC refresh', keywords: ['refresh'], receipt: true, receiptCopies: 1, documents: [], sticker: true },
+    { name: 'LDO', keywords: ['LDO'], receipt: true, receiptCopies: 1, documents: [{ file: 'LDO.pdf', copies: 1 }], sticker: true }
+  ],
+  other: { receipt: true, receiptCopies: 1, documents: [], sticker: true },
+  stickerFields: [
+    { name: 'ticket', label: 'Ticket' },
+    { name: 'asset', label: 'Asset tag' },
+    { name: 'user', label: 'User' }
+  ],
+  stickerLines: ['{type}', '{ticket}', 'Asset {asset}', '{user} - {date}'],
+  watchFolder: '%USERPROFILE%\\Downloads',
+  filesFolder: '%USERPROFILE%\\Documents\\NBLAB print files',
+  autoPrint: true
 })
 
 /** "a, b\nc" -> ['a', 'b', 'c'] */
@@ -48,149 +64,124 @@ export const splitList = (text) => String(text || '').split(/[,\n]/).map(item =>
 const clampCopies = (value) => Math.min(LIMITS.copies, Math.max(1, Math.round(Number(value) || 1)))
 const fieldName = (value) => String(value || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 30)
 const unique = (list) => [...new Set(list)]
+const cleanWords = (list) =>
+  unique((list || []).map(word => String(word).trim().slice(0, LIMITS.keyword)).filter(Boolean)).slice(0, LIMITS.keywords)
+
+export const cleanPrints = (prints) => ({
+  receipt: !!prints?.receipt,
+  receiptCopies: clampCopies(prints?.receiptCopies),
+  documents: (prints?.documents || [])
+    .map(doc => ({ file: String(doc?.file || '').trim().slice(0, LIMITS.file), copies: clampCopies(doc?.copies) }))
+    .filter(doc => doc.file)
+    .slice(0, LIMITS.documents),
+  sticker: !!prints?.sticker
+})
 
 /** A draft from the editor, trimmed and cut to the limits — what gets saved. */
 export const cleanAutomation = (draft) => ({
-  name: String(draft.name || '').trim().slice(0, LIMITS.name),
-  enabled: draft.enabled !== false,
-  keywords: unique((draft.keywords || []).map(word => String(word).trim().slice(0, LIMITS.keyword)).filter(Boolean)).slice(0, LIMITS.keywords),
-  fileTypes: unique((draft.fileTypes || []).map(type => String(type).trim().replace(/^\*?\./, '').toLowerCase()).filter(Boolean)).slice(0, LIMITS.fileTypes),
-  printFile: !!draft.printFile,
-  fileCopies: clampCopies(draft.fileCopies),
-  documents: (draft.documents || [])
-    .map(doc => ({ file: String(doc.file || '').trim().slice(0, LIMITS.file), copies: clampCopies(doc.copies) }))
-    .filter(doc => doc.file)
-    .slice(0, LIMITS.documents),
-  sticker: !!draft.sticker,
-  stickerLines: (draft.stickerLines || []).map(line => String(line).slice(0, LIMITS.stickerLine)).filter(line => line.trim()).slice(0, LIMITS.stickerLines),
-  stickerFields: (draft.stickerFields || [])
-    .map(field => ({ name: fieldName(field.name), label: String(field.label || '').trim().slice(0, LIMITS.label) }))
+  keywords: cleanWords(draft?.keywords),
+  fileTypes: unique((draft?.fileTypes || []).map(type => String(type).trim().replace(/^\*?\./, '').toLowerCase()).filter(Boolean)).slice(0, LIMITS.fileTypes),
+  types: (draft?.types || [])
+    .map(type => ({ name: String(type?.name || '').trim().slice(0, LIMITS.typeName), keywords: cleanWords(type?.keywords), ...cleanPrints(type) }))
+    .slice(0, LIMITS.types),
+  other: cleanPrints(draft?.other),
+  stickerFields: (draft?.stickerFields || [])
+    .map(field => ({ name: fieldName(field?.name), label: String(field?.label || '').trim().slice(0, LIMITS.label) }))
     .filter(field => field.name && field.label)
     .slice(0, LIMITS.stickerFields),
-  notes: String(draft.notes || '').trim().slice(0, LIMITS.notes)
+  stickerLines: (draft?.stickerLines || []).map(line => String(line).slice(0, LIMITS.stickerLine)).filter(line => line.trim()).slice(0, LIMITS.stickerLines),
+  watchFolder: String(draft?.watchFolder ?? '').trim().slice(0, LIMITS.folder),
+  filesFolder: String(draft?.filesFolder ?? '').trim().slice(0, LIMITS.folder),
+  autoPrint: draft?.autoPrint !== false
 })
 
 /** {name} placeholders used in sticker lines. */
 export const placeholdersIn = (lines) =>
   unique((lines || []).flatMap(line => [...String(line).matchAll(/\{([a-zA-Z0-9_]+)\}/g)].map(m => m[1].toLowerCase())))
 
-/** Placeholders a sticker uses that nothing fills. */
+/** Placeholders the sticker uses that nothing fills. */
 export const unknownPlaceholders = (automation) => {
   const known = new Set([...BUILTIN_FIELDS, ...(automation.stickerFields || []).map(field => field.name)])
   return placeholdersIn(automation.stickerLines).filter(name => !known.has(name))
 }
 
-/** Check an automation before saving; returns an error message or null. */
-export const validateAutomation = (automation) => {
-  const a = cleanAutomation(automation)
-  if (!a.name) return 'Give the automation a name.'
-  if (a.keywords.length === 0) return 'Add at least one word to look for in the file.'
-  if (!a.printFile && a.documents.length === 0 && !a.sticker) return 'Choose something to print.'
-  if (a.sticker && a.stickerLines.length === 0) return 'Write at least one line for the sticker.'
+const looksLikeWindowsFolder = (path) => /^([a-zA-Z]:\\|\\\\[^\\]+\\|%[A-Za-z_]+%)/.test(path)
+const printsSomething = (prints) => prints.receipt || prints.documents.length > 0 || prints.sticker
+
+/** Check the automation before saving; returns an error message or null. */
+export const validateAutomation = (draft) => {
+  const a = cleanAutomation(draft)
+  if (a.keywords.length === 0) return 'Add at least one word every Grab & Go file has.'
+  const names = new Set()
+  for (const type of a.types) {
+    if (!type.name) return 'Give every return type a name.'
+    if (type.name.toLowerCase() === OTHER_TYPE.toLowerCase()) return `"${OTHER_TYPE}" is already there, at the end.`
+    if (names.has(type.name.toLowerCase())) return `There are two types named "${type.name}".`
+    names.add(type.name.toLowerCase())
+    if (type.keywords.length === 0) return `Add the words that show a file is "${type.name}".`
+  }
+  const stickers = [...a.types, a.other].some(prints => prints.sticker)
+  if (stickers && a.stickerLines.length === 0) return 'Write at least one line for the sticker.'
   const unknown = unknownPlaceholders(a)
   if (unknown.length) return `The sticker uses {${unknown[0]}}, but no detail is read with that name.`
+  if (!looksLikeWindowsFolder(a.watchFolder)) return 'The folder to listen to should look like C:\\…, \\\\server\\…, or start with %USERPROFILE%.'
+  if (!looksLikeWindowsFolder(a.filesFolder)) return 'The folder with the files to print should look like C:\\…, \\\\server\\…, or start with %USERPROFILE%.'
   return null
 }
 
-/** What an automation does, in words. */
-export const automationSummary = (automation) => ({
-  trigger: automation.keywords.map(word => `"${word}"`).join(' and '),
-  types: automation.fileTypes.length ? automation.fileTypes.map(type => `.${type}`).join(', ') : 'any file',
-  prints: [
-    ...(automation.printFile ? [`the downloaded file${automation.fileCopies > 1 ? ` ×${automation.fileCopies}` : ''}`] : []),
-    ...automation.documents.map(doc => `${doc.file}${doc.copies > 1 ? ` ×${doc.copies}` : ''}`),
-    ...(automation.sticker ? ['a sticker'] : [])
-  ]
-})
+/** What a type prints, in words. */
+export const printsSummary = (prints) => [
+  ...(prints.receipt ? [`receipt${prints.receiptCopies > 1 ? ` ×${prints.receiptCopies}` : ''}`] : []),
+  ...prints.documents.map(doc => `${doc.file}${doc.copies > 1 ? ` ×${doc.copies}` : ''}`),
+  ...(prints.sticker ? ['sticker'] : [])
+]
 
-// ---- The agent's rules, mirrored --------------------------------------------------
+/** Every type, in the order files are matched, "anything else" last. */
+export const allTypes = (automation) => [
+  ...automation.types,
+  { name: OTHER_TYPE, keywords: [], ...automation.other }
+]
 
-const extensionOf = (fileName) => {
-  const match = /\.([^.\\/]+)$/.exec(String(fileName || ''))
-  return match ? match[1].toLowerCase() : ''
-}
+/** Every form any type prints, once each. */
+export const allDocuments = (automation) =>
+  unique(allTypes(automation).flatMap(type => type.documents.map(doc => doc.file)))
 
-/**
- * The first enabled automation whose keywords are ALL in the text (any case),
- * and whose file types — if it has any — include the file's.
- */
-export const matchAutomation = (text, fileName, automations) => {
-  const haystack = String(text || '').toLowerCase()
-  const type = extensionOf(fileName)
-  return (automations || []).find(automation => {
-    if (automation.enabled === false) return false
-    const types = automation.fileTypes || []
-    if (types.length > 0 && !types.includes(type)) return false
-    const words = automation.keywords || []
-    return words.length > 0 && words.every(word => haystack.includes(String(word).toLowerCase()))
-  }) || null
-}
-
-const escapeRegExp = (text) => String(text).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+export const isUseful = (automation) => allTypes(automation).some(type => printsSomething(type))
 
 /**
- * A detail from the file: what follows its label on the same line.
- *   "Asset tag: NB-1234"      -> NB-1234
- *   "Asset tag,NB-1234,Dana"  -> NB-1234   (CSV: up to the next comma)
- *   "Asset tag\tNB-1234\t…"   -> NB-1234   (tab-separated: up to the next tab)
+ * A starting point from the automations a site made before there was one:
+ * each becomes a return type; the words they share say it is a Grab & Go file.
  */
-export const readField = (text, label) => {
-  if (!label) return ''
-  // Spaces only before the separator, so a tab after the label counts as one.
-  const match = new RegExp(`${escapeRegExp(label)} *([:=#-]*) *([,;\\t])?[ \\t]*([^\\n]*)`, 'i').exec(String(text || ''))
-  if (!match) return ''
-  let value = match[3]
-  if (match[2]) value = value.split(match[2])[0]
-  return value.trim().replace(/^"(.*)"$/, '$1').trim().slice(0, LIMITS.value)
-}
-
-/** Every detail an automation reads, by name. */
-export const readFields = (text, fields) =>
-  Object.fromEntries((fields || []).map(field => [field.name, readField(text, field.label)]))
-
-/** Sticker lines with {placeholders} filled in; unknown ones are left empty. */
-export const fillSticker = (lines, values) =>
-  (lines || []).map(line => String(line).replace(/\{([a-zA-Z0-9_]+)\}/g, (_, name) => values[name.toLowerCase()] ?? ''))
-
-/** The built-in details for a file printed at `now`. */
-export const builtinValues = ({ fileName, automationName, now }) => {
-  const pad = (n) => String(n).padStart(2, '0')
+export const fromLegacy = (automations, agentSettings) => {
+  const list = (automations || []).filter(item => item && item.keywords?.length)
+  const base = defaultAutomation()
+  if (!list.length && !agentSettings) return base
+  const shared = list.length ? list[0].keywords.filter(word => list.every(item => item.keywords.includes(word))) : []
+  const withSticker = list.find(item => item.sticker && item.stickerLines?.length)
   return {
-    file: fileName || '',
-    date: `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()}`,
-    time: `${pad(now.getHours())}:${pad(now.getMinutes())}`,
-    automation: automationName || ''
+    ...base,
+    keywords: shared.length ? shared : base.keywords,
+    types: list.length
+      ? list.map(item => ({
+        name: item.name,
+        keywords: item.keywords.filter(word => !shared.includes(word)).length ? item.keywords.filter(word => !shared.includes(word)) : item.keywords,
+        receipt: !!item.printFile,
+        receiptCopies: item.fileCopies || 1,
+        documents: item.documents || [],
+        sticker: !!item.sticker
+      }))
+      : base.types,
+    stickerFields: withSticker?.stickerFields?.length ? withSticker.stickerFields : base.stickerFields,
+    stickerLines: withSticker ? withSticker.stickerLines : base.stickerLines,
+    watchFolder: agentSettings?.watchFolder || base.watchFolder,
+    filesFolder: agentSettings?.filesFolder || base.filesFolder,
+    autoPrint: agentSettings ? !agentSettings.dryRun : base.autoPrint
   }
 }
 
-// ---- The site's settings for the lab-PC agents ------------------------------------
-
-/**
- * What every lab PC at the site follows unless it sets its own folders. Paths
- * may use Windows variables, so one value works for everyone: %USERPROFILE% is
- * each person's own folder. The printers are not here: each PC chooses its A4
- * printer and its sticker printer from the printers installed in Windows.
- */
-export const AGENT_DEFAULTS = {
-  watchFolder: '%USERPROFILE%\\Downloads',
-  filesFolder: '%USERPROFILE%\\Documents\\NBLAB print files',
-  dryRun: false
-}
-
-export const cleanAgentSettings = (draft) => ({
-  watchFolder: String(draft?.watchFolder ?? '').trim().slice(0, 260),
-  filesFolder: String(draft?.filesFolder ?? '').trim().slice(0, 260),
-  dryRun: !!draft?.dryRun
+/** What the website hands to the agent on this PC. */
+export const agentPayload = (automation, { revision, site }) => ({
+  automation: cleanAutomation(automation),
+  revision: Number(revision) || 0,
+  site: { id: site?.id || '', name: site?.name || '' }
 })
-
-const looksLikeWindowsFolder = (path) => /^([a-zA-Z]:\\|\\\\[^\\]+\\|%[A-Za-z_]+%)/.test(path)
-
-/** Check the settings before saving; returns an error message or null. */
-export const validateAgentSettings = (draft) => {
-  const s = cleanAgentSettings(draft)
-  if (!s.watchFolder) return 'Choose the folder to listen to.'
-  if (!looksLikeWindowsFolder(s.watchFolder)) return 'The folder to listen to should look like C:\\…, \\\\server\\…, or start with %USERPROFILE%.'
-  if (!s.filesFolder) return 'Choose the folder with the files to print.'
-  if (!looksLikeWindowsFolder(s.filesFolder)) return 'The folder with the files to print should look like C:\\…, \\\\server\\…, or start with %USERPROFILE%.'
-  return null
-}

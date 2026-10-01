@@ -26,8 +26,9 @@ import { useAuth } from './hooks/useAuth'
 import { useDispatchQueue } from './hooks/useDispatchQueue'
 import { useJobs } from './hooks/useJobs'
 import { useProcesses } from './hooks/useProcesses'
-import { useAutomations } from './hooks/useAutomations'
-import { useAgentSettings } from './hooks/useAgentSettings'
+import { useGrabAndGo } from './hooks/useGrabAndGo'
+import { useLocalAgent } from './hooks/useLocalAgent'
+import { allTypes } from './services/automation'
 import { useServiceNowBridge } from './hooks/useServiceNowBridge'
 import { useServiceNowRelay } from './hooks/useServiceNowRelay'
 import { useRelayInfo } from './hooks/useRelayInfo'
@@ -316,8 +317,16 @@ function App() {
   // A job of a type with a process carries its steps; the checklist dialog
   // follows the live job, so ticks from another station show up here too.
   const workProcesses = useProcesses({ siteId: activeSiteId, canRead: canUse })
-  const dispatchAutomations = useAutomations({ siteId: activeSiteId, canRead: canUse })
-  const agentSettings = useAgentSettings({ siteId: activeSiteId, canRead: canUse })
+  const grabAndGo = useGrabAndGo({ siteId: activeSiteId, canRead: canUse })
+  // The automation agent on this PC: checked on the Automation page, and kept
+  // up to date from any page where it has answered before.
+  const localAgent = useLocalAgent({
+    active: route === 'automation' && canUse,
+    automation: canUse ? grabAndGo.automation : null,
+    revision: grabAndGo.revision,
+    siteId: activeSiteId,
+    siteName: site?.name || ''
+  })
 
   // Unassigned ServiceNow tasks: from the main PC's relay when this page was
   // opened from it, otherwise from the watcher in this browser (if any).
@@ -541,12 +550,12 @@ function App() {
       <AutomationPage
         key={activeSiteId}
         site={site}
-        automations={dispatchAutomations.automations}
-        agentSettings={agentSettings}
-        loaded={dispatchAutomations.loaded}
-        error={dispatchAutomations.error}
+        automation={grabAndGo.automation}
+        loaded={grabAndGo.loaded}
+        error={grabAndGo.error}
         canEdit={isSiteAdminHere}
         uid={auth.user.uid}
+        agent={localAgent}
       />
     )
   } else if (route === 'settings') {
@@ -618,7 +627,7 @@ function App() {
         summaries={{
           [DISPATCH_QUEUE]: !todayDay.isWorkDay ? 'Day off today' : todayCount > 0 ? `${todayCount} in queue today` : 'Queue empty today',
           [WORK_PROCESSES]: `${workProcesses.processes.length} ${workProcesses.processes.length === 1 ? 'process' : 'processes'}`,
-          [DISPATCH_AUTOMATION]: `${dispatchAutomations.automations.length} ${dispatchAutomations.automations.length === 1 ? 'automation' : 'automations'}`
+          [DISPATCH_AUTOMATION]: grabAndGo.automation ? `Grab & Go · ${allTypes(grabAndGo.automation).length} return types` : 'Not set up'
         }}
         tempUntil={!global && isTempMoveActive(profile, currentTime) ? formatShortDate(lastDayOf(profile.tempEndsAt)) : null}
         onNavigate={navigate}
